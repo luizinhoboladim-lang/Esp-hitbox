@@ -1,8 +1,5 @@
--- ESP + Hitbox com Menu (CoreGui) - com Toggle de CoreGui pela tecla K e nome "lxzinn__"
--- Mantive as correções do hitbox; adicionei:
---  - Nome da ScreenGui: "lxzinn__"
---  - Keybind K para mostrar/ocultar o menu (se o menu não existir, recria)
---  - Close agora apenas esconde o menu (não destrói), para que o toggle K funcione previsivelmente
+-- ESP + Hitbox com Menu (CoreGui) - nome "lxzinn__", toggle K para mostrar/ocultar
+-- Copie somente o conteúdo deste bloco (não copie as linhas de código-fence do Markdown)
 
 -- =========================
 -- Configurações iniciais
@@ -38,7 +35,7 @@ local LocalPlayer = Players.LocalPlayer
 
 -- Nome do menu (conforme pedido)
 local MENU_NAME = "lxzinn__"
-local menuScreen -- referência para o ScreenGui (será atribuída em createMenu)
+local menuScreen -- referência para o ScreenGui
 
 -- UTIL
 local function shortenName(name, maxLen)
@@ -178,7 +175,7 @@ local function updateAllESP()
 end
 
 -- =========================
--- HITBOX (FIX)
+-- HITBOX (fix)
 -- =========================
 local modifiedCharacters = {} -- character -> { hitboxPart = Instance, headClone = Instance, originalHeadProps = {} }
 
@@ -206,25 +203,22 @@ local function transformHead(character)
         return
     end
 
-    -- Criar parte hitbox separada (no nível do character)
     local hitboxPart = Instance.new("Part")
     hitboxPart.Name = HB.HitboxPartName
     hitboxPart.Size = Vector3.new(HB.hitboxSize, HB.hitboxSize, HB.hitboxSize)
     hitboxPart.Shape = Enum.PartType.Ball
-    hitboxPart.Transparency = 1 -- invisível
+    hitboxPart.Transparency = 1
     hitboxPart.CanCollide = false
     hitboxPart.Anchored = false
     hitboxPart.Massless = true
     hitboxPart.CFrame = head.CFrame
     hitboxPart.Parent = character
 
-    -- WeldConstraint para manter o hitbox preso ao head original
     local weldToHead = Instance.new("WeldConstraint")
     weldToHead.Part0 = hitboxPart
     weldToHead.Part1 = head
     weldToHead.Parent = hitboxPart
 
-    -- Clonar a cabeça original para dentro do hitbox (visível)
     local headClone = head:Clone()
     headClone.Name = HB.OriginalHeadName
     for _, child in ipairs(headClone:GetDescendants()) do
@@ -235,13 +229,11 @@ local function transformHead(character)
     headClone.Parent = hitboxPart
     headClone.CFrame = head.CFrame
 
-    -- WeldConstraint entre clone e hitboxPart
     local weldClone = Instance.new("WeldConstraint")
     weldClone.Part0 = headClone
     weldClone.Part1 = hitboxPart
     weldClone.Parent = headClone
 
-    -- Guardar propriedades originais da head para restaurar
     local originalHeadProps = {
         Size = head.Size,
         Transparency = head.Transparency,
@@ -250,7 +242,6 @@ local function transformHead(character)
         Massless = head.Massless,
     }
 
-    -- Tornar a head original invisível e não colidível (mantemos Motor6D/neck no lugar)
     head.Transparency = 1
     head.CanCollide = false
     head.Massless = true
@@ -383,7 +374,7 @@ local function createMenu()
     screen.ResetOnSpawn = false
     screen.Enabled = true
     screen.Parent = CoreGui
-    menuScreen = screen -- guarda referência
+    menuScreen = screen
 
     local frame = Instance.new("Frame")
     frame.Name = "Main"
@@ -523,7 +514,7 @@ local function createMenu()
         end
     end)
 
-    -- Agora o fechar apenas esconde (Enabled = false), para que o toggle pela tecla K possa reabrir
+    -- fechar apenas esconde o menu (Enabled = false)
     closeBtn.MouseButton1Click:Connect(function()
         if menuScreen and menuScreen.Parent then
             menuScreen.Enabled = false
