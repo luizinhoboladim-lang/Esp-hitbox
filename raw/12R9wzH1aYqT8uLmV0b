@@ -8,15 +8,15 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
 
 -- ═══════════════════════════════════════════════════════════════
--- CONFIGURAÇÕES GLOBAIS
+-- CONFIGURAÇÕES
 -- ═══════════════════════════════════════════════════════════════
 
 getgenv().Config = getgenv().Config or {
     HitboxEnabled = true,
     HitboxSize = 15,
-    HitboxTransparency = 1,
     
     ESPEnabled = true,
     ShowLocal = false,
@@ -25,11 +25,19 @@ getgenv().Config = getgenv().Config or {
     BillboardName = "ESP_Billboard_v1",
     MaxNameLength = 12,
     
-    -- NOVO: controla o TAMANHO DA FONTE do nick (não mais o truncamento)
     NameFontSize = 16,
-    NameTransparency = 0.45,  -- Transparência do texto (0 = opaco, 1 = invisível)
+    NameTransparency = 0.45,
     
     UpdateRate = 0.1,
+    
+    AimbotEnabled = false,
+    AimbotFOV = 40,
+    AimbotSmoothness = 0.15,
+    AimbotTarget = "Head",
+    AimbotDrawFOV = true,
+    AimbotToggleKey = Enum.KeyCode.RightShift,
+    AimbotHoldKey = Enum.KeyCode.Q,
+    AimbotMode = "Toggle",
     
     KeybindToggleAll = Enum.KeyCode.K,
     KeybindToggleGUI = Enum.KeyCode.LeftAlt,
@@ -38,7 +46,7 @@ getgenv().Config = getgenv().Config or {
 local Config = getgenv().Config
 
 -- ═══════════════════════════════════════════════════════════════
--- CACHE E CONTROLE
+-- CACHE
 -- ═══════════════════════════════════════════════════════════════
 
 local modifiedCharacters = {}
@@ -69,91 +77,82 @@ local function transformHead(character)
     if not head then return end
     
     if head.Size.X >= 5 then
-        modifiedCharacters[character] = true
+        modifiedCharacters[character] = {head = head}
         return
     end
     
+    local originalSize = head.Size
     local originalColor = head.Color
     local originalMaterial = head.Material
+    local originalTransparency = head.Transparency
     
-    local originalMesh = nil
-    local meshChild = head:FindFirstChildOfClass("SpecialMesh")
-    if meshChild then
-        originalMesh = meshChild:Clone()
+    local mesh = head:FindFirstChildOfClass("SpecialMesh")
+    local decal = head:FindFirstChildOfClass("Decal")
+    
+    local savedMesh, savedDecal
+    if mesh then
+        savedMesh = mesh:Clone()
+        mesh:Destroy()
+    end
+    if decal then
+        savedDecal = decal:Clone()
+        decal:Destroy()
     end
     
-    local originalDecal = nil
-    local decalChild = head:FindFirstChildOfClass("Decal")
-    if decalChild then
-        originalDecal = decalChild:Clone()
-    end
+    modifiedCharacters[character] = {
+        head = head,
+        originalSize = originalSize,
+        originalColor = originalColor,
+        originalMaterial = originalMaterial,
+        originalTransparency = originalTransparency,
+        savedMesh = savedMesh,
+        savedDecal = savedDecal,
+    }
     
     head.Size = Vector3.new(Config.HitboxSize, Config.HitboxSize, Config.HitboxSize)
     head.Shape = Enum.PartType.Ball
     head.Transparency = 1
-    head.Material = Enum.Material.ForceField
     head.CanCollide = false
     head.Massless = true
     
-    for _, v in pairs(head:GetChildren()) do
-        if v:IsA("SpecialMesh") or v:IsA("Decal") or v:IsA("SurfaceAppearance") then
-            v:Destroy()
-        end
-    end
+    local visualMesh = Instance.new("SpecialMesh")
+    visualMesh.MeshType = Enum.MeshType.Head
+    visualMesh.Name = "VisualMesh"
+    visualMesh.Scale = Vector3.new(
+        2 / Config.HitboxSize,
+        1 / Config.HitboxSize,
+        1 / Config.HitboxSize
+    )
+    visualMesh.Parent = head
     
-    local fakeHead = Instance.new("Part")
-    fakeHead.Name = "FakeHead"
-    fakeHead.Size = Vector3.new(2, 1, 1)
-    fakeHead.Transparency = 0
-    fakeHead.CanCollide = false
-    fakeHead.Massless = true
-    fakeHead.Color = originalColor
-    fakeHead.Material = originalMaterial
-    fakeHead.TopSurface = Enum.SurfaceType.Smooth
-    fakeHead.BottomSurface = Enum.SurfaceType.Smooth
-    fakeHead.Parent = head
-    
-    if originalMesh then
-        originalMesh.Parent = fakeHead
-    end
-    
-    if originalDecal then
-        originalDecal.Parent = fakeHead
-    end
-    
-    local weld = Instance.new("Weld")
-    weld.Part0 = head
-    weld.Part1 = fakeHead
-    weld.C0 = CFrame.new(0, 0, 0)
-    weld.Parent = fakeHead
-    
-    modifiedCharacters[character] = true
+    head.Color = originalColor
+    head.Material = originalMaterial
+    head.Transparency = 0
 end
 
 local function restoreHead(character)
-    if not modifiedCharacters[character] then return end
+    local data = modifiedCharacters[character]
+    if not data then return end
     
-    local head = character:FindFirstChild("Head")
-    if head then
-        local fakeHead = head:FindFirstChild("FakeHead")
-        if fakeHead then
-            local decal = fakeHead:FindFirstChildOfClass("Decal")
-            if decal then
-                decal:Clone().Parent = head
-            end
-            
-            local mesh = fakeHead:FindFirstChildOfClass("SpecialMesh")
-            if mesh then
-                mesh:Clone().Parent = head
-            end
-            
-            fakeHead:Destroy()
+    local head = data.head
+    if head and head.Parent then
+        local visualMesh = head:FindFirstChild("VisualMesh")
+        if visualMesh then
+            visualMesh:Destroy()
         end
         
-        head.Size = Vector3.new(2, 1, 1)
-        head.Transparency = 0
+        if data.savedMesh then
+            data.savedMesh:Clone().Parent = head
+        end
+        if data.savedDecal then
+            data.savedDecal:Clone().Parent = head
+        end
+        
+        head.Size = data.originalSize or Vector3.new(2, 1, 1)
+        head.Transparency = data.originalTransparency or 0
         head.Shape = Enum.PartType.Block
-        head.Material = Enum.Material.Plastic
+        head.Color = data.originalColor
+        head.Material = data.originalMaterial
     end
     
     modifiedCharacters[character] = nil
@@ -162,10 +161,19 @@ end
 local function updateHitboxSize(newSize)
     Config.HitboxSize = math.clamp(newSize, 1, 500)
     
-    for character, _ in pairs(modifiedCharacters) do
-        local head = character:FindFirstChild("Head")
-        if head then
+    for character, data in pairs(modifiedCharacters) do
+        local head = data.head
+        if head and head.Parent then
             head.Size = Vector3.new(Config.HitboxSize, Config.HitboxSize, Config.HitboxSize)
+            
+            local visualMesh = head:FindFirstChild("VisualMesh")
+            if visualMesh then
+                visualMesh.Scale = Vector3.new(
+                    2 / Config.HitboxSize,
+                    1 / Config.HitboxSize,
+                    1 / Config.HitboxSize
+                )
+            end
         end
     end
 end
@@ -180,7 +188,11 @@ local function setHitboxEnabled(enabled)
             end
         end
     else
+        local characters = {}
         for character, _ in pairs(modifiedCharacters) do
+            table.insert(characters, character)
+        end
+        for _, character in ipairs(characters) do
             restoreHead(character)
         end
     end
@@ -193,14 +205,10 @@ end
 local function applyBillboardStyle(billboard, label)
     if not billboard or not label then return end
     
-    -- Tamanho do texto (fonte)
     label.TextSize = Config.NameFontSize
-    
-    -- Transparência do texto (mantém visível mas suave)
     label.TextTransparency = Config.NameTransparency
-    label.TextStrokeTransparency = Config.NameTransparency + 0.2  -- contorno mais leve
+    label.TextStrokeTransparency = math.min(1, Config.NameTransparency + 0.2)
     
-    -- Ajusta o tamanho do Billboard baseado na fonte
     billboard.Size = UDim2.new(0, 140, 0, math.max(24, Config.NameFontSize + 12))
 end
 
@@ -346,16 +354,88 @@ local function setESPEnabled(enabled)
 end
 
 -- ═══════════════════════════════════════════════════════════════
+-- AIMBOT
+-- ═══════════════════════════════════════════════════════════════
+
+local aimbotFOVRing = Drawing.new("Circle")
+aimbotFOVRing.Visible = false
+aimbotFOVRing.Thickness = 2
+aimbotFOVRing.Color = Color3.fromRGB(114, 88, 255)
+aimbotFOVRing.Filled = false
+aimbotFOVRing.Radius = Config.AimbotFOV
+aimbotFOVRing.Position = Camera.ViewportSize / 2
+aimbotFOVRing.Transparency = 0.4
+
+local aimbotIsHolding = false
+
+local function setAimbotEnabled(enabled)
+    Config.AimbotEnabled = enabled
+    aimbotFOVRing.Visible = enabled and Config.AimbotDrawFOV
+end
+
+local function getClosestTargetInFOV()
+    local closest = nil
+    local lastDist = math.huge
+    local centerPos = Camera.ViewportSize / 2
+    
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local part = player.Character:FindFirstChild(Config.AimbotTarget)
+            if part then
+                local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+                if humanoid and humanoid.Health > 0 then
+                    local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
+                    if onScreen then
+                        local dist = (Vector2.new(screenPos.X, screenPos.Y) - centerPos).Magnitude
+                        if dist < lastDist and dist < Config.AimbotFOV then
+                            lastDist = dist
+                            closest = player
+                        end
+                    end
+                end
+            end
+        end
+    end
+    
+    return closest
+end
+
+RunService.RenderStepped:Connect(function()
+    if not Config.AimbotEnabled then return end
+    if Config.AimbotMode == "Hold" and not aimbotIsHolding then return end
+    
+    if Config.AimbotDrawFOV then
+        aimbotFOVRing.Position = Camera.ViewportSize / 2
+        aimbotFOVRing.Radius = Config.AimbotFOV
+    end
+    
+    local target = getClosestTargetInFOV()
+    if target and target.Character then
+        local targetPart = target.Character:FindFirstChild(Config.AimbotTarget)
+        if targetPart then
+            local camPos = Camera.CFrame.Position
+            local targetPos = targetPart.Position
+            local lookVector = (targetPos - camPos).Unit
+            local newCFrame = CFrame.new(camPos, camPos + lookVector)
+            
+            local smooth = math.clamp(Config.AimbotSmoothness, 0, 1)
+            Camera.CFrame = Camera.CFrame:Lerp(newCFrame, 1 - smooth)
+        end
+    end
+end)
+
+-- ═══════════════════════════════════════════════════════════════
 -- GERENCIAMENTO DE JOGADORES
 -- ═══════════════════════════════════════════════════════════════
 
 local function onCharacterAdded(player, character)
-    task.wait(1)
+    local head = character:WaitForChild("Head", 3)
+    if not head then return end
     
-    if not character or not character.Parent then return end
-    
-    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    local humanoid = character:WaitForChild("Humanoid", 3)
     if not humanoid then return end
+    
+    if not character.Parent then return end
     
     if player ~= LocalPlayer or Config.ShowLocal then
         setupTarget(character, player)
@@ -366,10 +446,12 @@ local function onCharacterAdded(player, character)
     end
     
     humanoid:GetPropertyChangedSignal("Sit"):Connect(function()
-        if humanoid.Sit and player ~= LocalPlayer then
+        if player == LocalPlayer then return end
+        
+        if humanoid.Sit then
             restoreHead(character)
-        elseif not humanoid.Sit and player ~= LocalPlayer and Config.HitboxEnabled then
-            task.wait(0.5)
+        elseif Config.HitboxEnabled then
+            task.wait(0.3)
             if character.Parent then
                 transformHead(character)
             end
@@ -380,7 +462,6 @@ end
 local function onCharacterRemoving(player, character)
     removeTarget(character)
     restoreHead(character)
-    modifiedCharacters[character] = nil
 end
 
 -- ═══════════════════════════════════════════════════════════════
@@ -442,11 +523,13 @@ screenGui.Parent = guiParent
 
 local mainFrame = Instance.new("Frame")
 mainFrame.Name = "MainFrame"
-mainFrame.Size = UDim2.new(0, 400, 0, 560)
-mainFrame.Position = UDim2.new(0.5, -200, 0.5, -280)
+mainFrame.Size = UDim2.new(0, 400, 0, 720)
+mainFrame.Position = UDim2.new(0.5, -200, 0.5, -360)
 mainFrame.BackgroundColor3 = THEME.Background
 mainFrame.BorderSizePixel = 0
 mainFrame.Visible = false
+mainFrame.ZIndex = 1
+mainFrame.ClipsDescendants = false
 mainFrame.Parent = screenGui
 
 local mainCorner = Instance.new("UICorner")
@@ -468,15 +551,15 @@ shadow.ScaleType = Enum.ScaleType.Slice
 shadow.SliceCenter = Rect.new(10, 10, 118, 118)
 shadow.Size = UDim2.new(1, 30, 1, 30)
 shadow.Position = UDim2.new(0, -15, 0, -15)
-shadow.ZIndex = -1
+shadow.ZIndex = 0
 shadow.Parent = mainFrame
 
--- Barra de título
 local titleBar = Instance.new("Frame")
 titleBar.Name = "TitleBar"
 titleBar.Size = UDim2.new(1, 0, 0, 38)
 titleBar.BackgroundColor3 = THEME.Panel
 titleBar.BorderSizePixel = 0
+titleBar.ZIndex = 2
 titleBar.Parent = mainFrame
 
 local titleCorner = Instance.new("UICorner")
@@ -488,6 +571,7 @@ titleLine.Size = UDim2.new(1, 0, 0, 1)
 titleLine.Position = UDim2.new(0, 0, 1, -1)
 titleLine.BackgroundColor3 = THEME.Accent1
 titleLine.BorderSizePixel = 0
+titleLine.ZIndex = 3
 titleLine.Parent = titleBar
 
 local titleLineGradient = Instance.new("UIGradient")
@@ -499,6 +583,7 @@ titleIndicator.Size = UDim2.new(0, 3, 0, 18)
 titleIndicator.Position = UDim2.new(0, 12, 0.5, -9)
 titleIndicator.BackgroundColor3 = THEME.Accent1
 titleIndicator.BorderSizePixel = 0
+titleIndicator.ZIndex = 3
 titleIndicator.Parent = titleBar
 
 local titleIndicatorCorner = Instance.new("UICorner")
@@ -520,6 +605,7 @@ titleLabel.Text = "Lxzinn__ H-E Menu"
 titleLabel.TextColor3 = THEME.Text
 titleLabel.TextSize = 14
 titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+titleLabel.ZIndex = 3
 titleLabel.Parent = titleBar
 
 local closeButton = Instance.new("TextButton")
@@ -532,6 +618,7 @@ closeButton.TextColor3 = THEME.SubText
 closeButton.Font = Enum.Font.GothamBold
 closeButton.TextSize = 12
 closeButton.AutoButtonColor = false
+closeButton.ZIndex = 3
 closeButton.Parent = titleBar
 
 local closeCorner = Instance.new("UICorner")
@@ -548,7 +635,6 @@ closeButton.MouseButton1Click:Connect(function()
     mainFrame.Visible = false
 end)
 
--- Conteúdo
 local content = Instance.new("ScrollingFrame")
 content.Name = "Content"
 content.Size = UDim2.new(1, -20, 1, -52)
@@ -559,6 +645,8 @@ content.ScrollBarThickness = 3
 content.ScrollBarImageColor3 = THEME.Accent1
 content.CanvasSize = UDim2.new(0, 0, 0, 0)
 content.AutomaticCanvasSize = Enum.AutomaticSize.Y
+content.ClipsDescendants = true
+content.ZIndex = 2
 content.Parent = mainFrame
 
 local contentLayout = Instance.new("UIListLayout")
@@ -566,16 +654,13 @@ contentLayout.Padding = UDim.new(0, 5)
 contentLayout.SortOrder = Enum.SortOrder.LayoutOrder
 contentLayout.Parent = content
 
--- ═══════════════════════════════════════════════════════════════
--- COMPONENTES
--- ═══════════════════════════════════════════════════════════════
-
 local function makeSection(title)
     local section = Instance.new("Frame")
     section.Name = "Section_" .. title
     section.Size = UDim2.new(1, 0, 0, 24)
     section.BackgroundColor3 = THEME.PanelLight
     section.BorderSizePixel = 0
+    section.ZIndex = 3
     section.Parent = content
     
     local corner = Instance.new("UICorner")
@@ -592,6 +677,7 @@ local function makeSection(title)
     indicator.Position = UDim2.new(0, 10, 0.5, -6)
     indicator.BackgroundColor3 = THEME.Accent1
     indicator.BorderSizePixel = 0
+    indicator.ZIndex = 4
     indicator.Parent = section
     
     local label = Instance.new("TextLabel")
@@ -603,6 +689,7 @@ local function makeSection(title)
     label.TextColor3 = THEME.Text
     label.TextSize = 11
     label.TextXAlignment = Enum.TextXAlignment.Left
+    label.ZIndex = 4
     label.Parent = section
     
     return section
@@ -614,6 +701,7 @@ local function makeToggle(parent, text, initialValue, callback)
     frame.Size = UDim2.new(1, 0, 0, 32)
     frame.BackgroundColor3 = THEME.Panel
     frame.BorderSizePixel = 0
+    frame.ZIndex = 3
     frame.Parent = parent
     
     local corner = Instance.new("UICorner")
@@ -634,6 +722,7 @@ local function makeToggle(parent, text, initialValue, callback)
     label.TextColor3 = THEME.Text
     label.TextSize = 12
     label.TextXAlignment = Enum.TextXAlignment.Left
+    label.ZIndex = 4
     label.Parent = frame
     
     local toggle = Instance.new("TextButton")
@@ -645,6 +734,7 @@ local function makeToggle(parent, text, initialValue, callback)
     toggle.Font = Enum.Font.GothamBold
     toggle.TextSize = 10
     toggle.AutoButtonColor = false
+    toggle.ZIndex = 4
     toggle.Parent = frame
     
     local toggleCorner = Instance.new("UICorner")
@@ -690,6 +780,7 @@ local function makeSlider(parent, text, minVal, maxVal, initialValue, callback)
     frame.Size = UDim2.new(1, 0, 0, 56)
     frame.BackgroundColor3 = THEME.Panel
     frame.BorderSizePixel = 0
+    frame.ZIndex = 3
     frame.Parent = parent
     
     local corner = Instance.new("UICorner")
@@ -710,6 +801,7 @@ local function makeSlider(parent, text, minVal, maxVal, initialValue, callback)
     label.TextColor3 = THEME.Text
     label.TextSize = 12
     label.TextXAlignment = Enum.TextXAlignment.Left
+    label.ZIndex = 4
     label.Parent = frame
     
     local valueLabel = Instance.new("TextLabel")
@@ -721,6 +813,7 @@ local function makeSlider(parent, text, minVal, maxVal, initialValue, callback)
     valueLabel.TextColor3 = THEME.Accent2
     valueLabel.TextSize = 12
     valueLabel.TextXAlignment = Enum.TextXAlignment.Right
+    valueLabel.ZIndex = 4
     valueLabel.Parent = frame
     
     local sliderBG = Instance.new("Frame")
@@ -728,6 +821,7 @@ local function makeSlider(parent, text, minVal, maxVal, initialValue, callback)
     sliderBG.Position = UDim2.new(0, 12, 0, 38)
     sliderBG.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
     sliderBG.BorderSizePixel = 0
+    sliderBG.ZIndex = 4
     sliderBG.Parent = frame
     
     local sliderBGStroke = Instance.new("UIStroke")
@@ -739,6 +833,7 @@ local function makeSlider(parent, text, minVal, maxVal, initialValue, callback)
     sliderFill.Size = UDim2.new((initialValue - minVal) / (maxVal - minVal), 0, 1, 0)
     sliderFill.BackgroundColor3 = THEME.Accent1
     sliderFill.BorderSizePixel = 0
+    sliderFill.ZIndex = 5
     sliderFill.Parent = sliderBG
     
     local sliderFillGradient = Instance.new("UIGradient")
@@ -751,6 +846,7 @@ local function makeSlider(parent, text, minVal, maxVal, initialValue, callback)
     sliderKnob.BackgroundColor3 = Color3.new(1, 1, 1)
     sliderKnob.Text = ""
     sliderKnob.AutoButtonColor = false
+    sliderKnob.ZIndex = 6
     sliderKnob.Parent = sliderBG
     
     local sliderKnobCorner = Instance.new("UICorner")
@@ -804,6 +900,105 @@ local function makeSlider(parent, text, minVal, maxVal, initialValue, callback)
     end
 end
 
+-- ═══ SELETOR CICLO (substitui dropdown - sem bugs) ═══
+local function makeDropdown(parent, text, options, initialValue, callback)
+    local frame = Instance.new("Frame")
+    frame.Name = text
+    frame.Size = UDim2.new(1, 0, 0, 32)
+    frame.BackgroundColor3 = THEME.Panel
+    frame.BorderSizePixel = 0
+    frame.ZIndex = 3
+    frame.Parent = parent
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 3)
+    corner.Parent = frame
+    
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = THEME.Border
+    stroke.Thickness = 1
+    stroke.Parent = frame
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, -100, 1, 0)
+    label.Position = UDim2.new(0, 12, 0, 0)
+    label.BackgroundTransparency = 1
+    label.Font = Enum.Font.Gotham
+    label.Text = text
+    label.TextColor3 = THEME.Text
+    label.TextSize = 12
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.ZIndex = 4
+    label.Parent = frame
+    
+    local button = Instance.new("TextButton")
+    button.Size = UDim2.new(0, 80, 0, 22)
+    button.Position = UDim2.new(1, -92, 0.5, -11)
+    button.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    button.Text = ""
+    button.AutoButtonColor = false
+    button.ZIndex = 4
+    button.Parent = frame
+    
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.CornerRadius = UDim.new(0, 3)
+    btnCorner.Parent = button
+    
+    local btnStroke = Instance.new("UIStroke")
+    btnStroke.Color = THEME.BorderLight
+    btnStroke.Thickness = 1
+    btnStroke.Parent = button
+    
+    local arrow = Instance.new("TextLabel")
+    arrow.Size = UDim2.new(1, 0, 1, 0)
+    arrow.BackgroundTransparency = 1
+    arrow.Font = Enum.Font.GothamBold
+    arrow.Text = initialValue .. "  >"
+    arrow.TextColor3 = THEME.Accent2
+    arrow.TextSize = 11
+    arrow.TextXAlignment = Enum.TextXAlignment.Center
+    arrow.ZIndex = 5
+    arrow.Parent = button
+    
+    local currentIndex = 1
+    for i, opt in ipairs(options) do
+        if opt == initialValue then
+            currentIndex = i
+            break
+        end
+    end
+    
+    local function updateDisplay()
+        arrow.Text = options[currentIndex] .. "  >"
+        if callback then callback(options[currentIndex]) end
+    end
+    
+    button.MouseEnter:Connect(function()
+        TweenService:Create(button, TweenInfo.new(0.15), {BackgroundColor3 = THEME.PanelLight}):Play()
+    end)
+    button.MouseLeave:Connect(function()
+        TweenService:Create(button, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(30, 30, 30)}):Play()
+    end)
+    
+    button.MouseButton1Click:Connect(function()
+        currentIndex = currentIndex + 1
+        if currentIndex > #options then
+            currentIndex = 1
+        end
+        updateDisplay()
+    end)
+    
+    return function(v)
+        for i, opt in ipairs(options) do
+            if opt == v then
+                currentIndex = i
+                updateDisplay()
+                break
+            end
+        end
+    end
+end
+
 -- ═══════════════════════════════════════════════════════════════
 -- CONSTRUÇÃO DA GUI
 -- ═══════════════════════════════════════════════════════════════
@@ -837,10 +1032,8 @@ local setESPDistance = makeSlider(content, "Distancia Maxima", 50, 5000, Config.
     Config.MaxDistance = v
 end)
 
--- ═══ NOVO: TAMANHO DA FONTE DO NOME ═══
 local setESPNameFontSize = makeSlider(content, "Tamanho do Nome", 8, 48, Config.NameFontSize, function(v)
     Config.NameFontSize = v
-    -- Aplica em todos os billboards ativos
     for _, data in pairs(targetCache) do
         if data.billboard then
             local label = data.billboard:FindFirstChild("Label")
@@ -849,7 +1042,6 @@ local setESPNameFontSize = makeSlider(content, "Tamanho do Nome", 8, 48, Config.
     end
 end)
 
--- ═══ NOVO: TRANSPARÊNCIA DO NOME ═══
 local setESPNameTransparency = makeSlider(content, "Transparencia do Nome", 0, 90, math.floor(Config.NameTransparency * 100), function(v)
     Config.NameTransparency = v / 100
     for _, data in pairs(targetCache) do
@@ -860,14 +1052,45 @@ local setESPNameTransparency = makeSlider(content, "Transparencia do Nome", 0, 9
     end
 end)
 
--- Rodapé
+makeSection("AIMBOT (OPCIONAL)")
+
+local setAimbotToggle = makeToggle(content, "Aimbot Ativado", Config.AimbotEnabled, function(v)
+    setAimbotEnabled(v)
+end)
+
+local setAimbotFOV = makeSlider(content, "FOV (Raio)", 10, 300, Config.AimbotFOV, function(v)
+    Config.AimbotFOV = v
+    if Config.AimbotDrawFOV then
+        aimbotFOVRing.Radius = v
+    end
+end)
+
+local setAimbotSmooth = makeSlider(content, "Suavidade", 0, 100, math.floor(Config.AimbotSmoothness * 100), function(v)
+    Config.AimbotSmoothness = v / 100
+end)
+
+local setAimbotMode = makeDropdown(content, "Modo", {"Toggle", "Hold"}, Config.AimbotMode, function(v)
+    Config.AimbotMode = v
+end)
+
+local setAimbotTarget = makeDropdown(content, "Alvo", {"Head", "HumanoidRootPart", "UpperTorso"}, Config.AimbotTarget, function(v)
+    Config.AimbotTarget = v
+end)
+
+local setAimbotDrawFOV = makeToggle(content, "Mostrar Circulo FOV", Config.AimbotDrawFOV, function(v)
+    Config.AimbotDrawFOV = v
+    aimbotFOVRing.Visible = Config.AimbotEnabled and v
+end)
+
 local footer = Instance.new("TextLabel")
-footer.Size = UDim2.new(1, 0, 0, 24)
+footer.Size = UDim2.new(1, 0, 0, 40)
 footer.BackgroundTransparency = 1
 footer.Font = Enum.Font.Gotham
-footer.Text = "ALT = GUI    |    K = Tudo"
+footer.Text = "ALT = GUI    |    K = Tudo    |    RS = Aimbot"
 footer.TextColor3 = THEME.SubText
 footer.TextSize = 10
+footer.TextWrapped = true
+footer.ZIndex = 3
 footer.Parent = content
 
 -- ═══════════════════════════════════════════════════════════════
@@ -924,6 +1147,34 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
         if setESPToggle then setESPToggle(newState) end
         if setMasterToggle then setMasterToggle(newState) end
         return
+    end
+    
+    if key == Config.AimbotToggleKey then
+        if Config.AimbotMode == "Toggle" then
+            local newState = not Config.AimbotEnabled
+            setAimbotEnabled(newState)
+            if setAimbotToggle then setAimbotToggle(newState) end
+        else
+            aimbotIsHolding = true
+        end
+        return
+    end
+    
+    if key == Config.AimbotHoldKey and Config.AimbotMode == "Hold" then
+        aimbotIsHolding = true
+        return
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
+    
+    if input.KeyCode == Config.AimbotToggleKey and Config.AimbotMode == "Hold" then
+        aimbotIsHolding = false
+    end
+    
+    if input.KeyCode == Config.AimbotHoldKey then
+        aimbotIsHolding = false
     end
 end)
 
@@ -990,15 +1241,22 @@ task.spawn(function()
     end
 end)
 
-task.wait(2)
-for _, player in ipairs(Players:GetPlayers()) do
-    if player ~= LocalPlayer and player.Character and Config.HitboxEnabled then
-        transformHead(player.Character)
+task.spawn(function()
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and Config.HitboxEnabled then
+            local head = player.Character:FindFirstChild("Head")
+            if head then
+                transformHead(player.Character)
+            end
+        end
     end
-end
+end)
+
+setAimbotEnabled(Config.AimbotEnabled)
 
 print("═════════════════════════════════════")
 print("[Lxzinn__ H-E Menu] Carregado!")
 print("[ALT] Abrir/Fechar GUI")
 print("[K] Ligar/Desligar TUDO")
+print("[RS] Toggle Aimbot")
 print("═════════════════════════════════════")
