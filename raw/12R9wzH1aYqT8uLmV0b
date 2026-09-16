@@ -1,6 +1,7 @@
 -- ═══════════════════════════════════════════════════════════════
 -- Lxzinn__ H-E Menu
 -- ALT = Abrir/Fechar GUI | K = Ligar/Desligar Tudo
+-- Hotkeys por opção com salvamento persistente
 -- ═══════════════════════════════════════════════════════════════
 
 local Players = game:GetService("Players")
@@ -11,10 +12,59 @@ local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
 -- ═══════════════════════════════════════════════════════════════
--- CONFIGURAÇÕES
+-- SISTEMA DE SALVAMENTO
 -- ═══════════════════════════════════════════════════════════════
 
-getgenv().Config = getgenv().Config or {
+local CONFIG_FILE = "LxzinnHE_config.json"
+
+local function hasFileAPI()
+    return typeof(writefile) == "function" and typeof(readfile) == "function" and typeof(isfile) == "function"
+end
+
+local function saveConfig(tbl)
+    if hasFileAPI() then
+        pcall(function()
+            writefile(CONFIG_FILE, game:GetService("HttpService"):JSONEncode(tbl))
+        end)
+    end
+end
+
+local function loadConfig()
+    if hasFileAPI() then
+        local ok, data = pcall(function()
+            if isfile(CONFIG_FILE) then
+                return game:GetService("HttpService"):JSONDecode(readfile(CONFIG_FILE))
+            end
+        end)
+        if ok and type(data) == "table" then
+            return data
+        end
+    end
+    return nil
+end
+
+-- Converte KeyCode <-> String (pra salvar em JSON)
+local function keyToString(keyCode)
+    if typeof(keyCode) == "EnumItem" then
+        return keyCode.Name
+    end
+    return tostring(keyCode)
+end
+
+local function stringToKey(str)
+    if not str then return nil end
+    local ok, key = pcall(function()
+        return Enum.KeyCode[str]
+    end)
+    if ok then return key end
+    return nil
+end
+
+-- ═══════════════════════════════════════════════════════════════
+-- CONFIGURAÇÕES (com carregamento persistente)
+-- ═══════════════════════════════════════════════════════════════
+
+local DEFAULT_CONFIG = {
     HitboxEnabled = true,
     HitboxSize = 15,
     
@@ -35,15 +85,63 @@ getgenv().Config = getgenv().Config or {
     AimbotSmoothness = 0.15,
     AimbotTarget = "Head",
     AimbotDrawFOV = true,
-    AimbotToggleKey = Enum.KeyCode.RightShift,
-    AimbotHoldKey = Enum.KeyCode.Q,
     AimbotMode = "Toggle",
     
-    KeybindToggleAll = Enum.KeyCode.K,
-    KeybindToggleGUI = Enum.KeyCode.LeftAlt,
+    KeybindToggleAll = "K",
+    KeybindToggleGUI = "LeftAlt",
+    KeybindToggleHitbox = "H",
+    KeybindToggleESP = "J",
+    KeybindToggleAimbot = "RightShift",
+    
+    Hotkeys = {},  -- armazena strings
 }
 
+-- Carrega config salva
+local saved = loadConfig() or {}
+getgenv().Config = getgenv().Config or {}
+
+for key, defaultVal in pairs(DEFAULT_CONFIG) do
+    if getgenv().Config[key] == nil then
+        getgenv().Config[key] = saved[key] ~= nil and saved[key] or defaultVal
+    end
+end
+
+-- Converte strings de volta pra KeyCode
 local Config = getgenv().Config
+Config.KeybindToggleAll = stringToKey(Config.KeybindToggleAll) or Enum.KeyCode.K
+Config.KeybindToggleGUI = stringToKey(Config.KeybindToggleGUI) or Enum.KeyCode.LeftAlt
+Config.KeybindToggleHitbox = stringToKey(Config.KeybindToggleHitbox) or Enum.KeyCode.H
+Config.KeybindToggleESP = stringToKey(Config.KeybindToggleESP) or Enum.KeyCode.J
+Config.KeybindToggleAimbot = stringToKey(Config.KeybindToggleAimbot) or Enum.KeyCode.RightShift
+Config.Hotkeys = Config.Hotkeys or {}
+
+-- Salva tudo
+local function persistConfig()
+    local toSave = {
+        HitboxEnabled = Config.HitboxEnabled,
+        HitboxSize = Config.HitboxSize,
+        ESPEnabled = Config.ESPEnabled,
+        ShowLocal = Config.ShowLocal,
+        MaxDistance = Config.MaxDistance,
+        ShowNPCs = Config.ShowNPCs,
+        NameFontSize = Config.NameFontSize,
+        NameTransparency = Config.NameTransparency,
+        UpdateRate = Config.UpdateRate,
+        AimbotEnabled = Config.AimbotEnabled,
+        AimbotFOV = Config.AimbotFOV,
+        AimbotSmoothness = Config.AimbotSmoothness,
+        AimbotTarget = Config.AimbotTarget,
+        AimbotDrawFOV = Config.AimbotDrawFOV,
+        AimbotMode = Config.AimbotMode,
+        KeybindToggleAll = keyToString(Config.KeybindToggleAll),
+        KeybindToggleGUI = keyToString(Config.KeybindToggleGUI),
+        KeybindToggleHitbox = keyToString(Config.KeybindToggleHitbox),
+        KeybindToggleESP = keyToString(Config.KeybindToggleESP),
+        KeybindToggleAimbot = keyToString(Config.KeybindToggleAimbot),
+        Hotkeys = Config.Hotkeys,
+    }
+    saveConfig(toSave)
+end
 
 -- ═══════════════════════════════════════════════════════════════
 -- CACHE
@@ -67,7 +165,7 @@ local function shortenName(name, maxLen)
 end
 
 -- ═══════════════════════════════════════════════════════════════
--- HITBOX EXPANDER
+-- HITBOX EXPANDER (MÉTODO ULTRA-LEVE)
 -- ═══════════════════════════════════════════════════════════════
 
 local function transformHead(character)
@@ -84,19 +182,51 @@ local function transformHead(character)
     local originalSize = head.Size
     local originalColor = head.Color
     local originalMaterial = head.Material
+    local originalShape = head.Shape
     local originalTransparency = head.Transparency
     
-    local mesh = head:FindFirstChildOfClass("SpecialMesh")
-    local decal = head:FindFirstChildOfClass("Decal")
-    
-    local savedMesh, savedDecal
-    if mesh then
-        savedMesh = mesh:Clone()
-        mesh:Destroy()
+    local originalMesh = nil
+    local meshChild = head:FindFirstChildOfClass("SpecialMesh")
+    if meshChild then
+        originalMesh = meshChild:Clone()
+        meshChild:Destroy()
     end
-    if decal then
-        savedDecal = decal:Clone()
-        decal:Destroy()
+    
+    local originalDecal = nil
+    local decalChild = head:FindFirstChildOfClass("Decal")
+    if decalChild then
+        originalDecal = decalChild:Clone()
+        decalChild:Destroy()
+    end
+    
+    local newSize = Config.HitboxSize
+    head.Size = Vector3.new(newSize, newSize, newSize)
+    head.Shape = Enum.PartType.Ball
+    head.CanCollide = false
+    head.Massless = true
+    head.CastShadow = false
+    head.Transparency = 0
+    head.Color = originalColor
+    head.Material = originalMaterial
+    
+    local visualMesh = Instance.new("SpecialMesh")
+    visualMesh.MeshType = Enum.MeshType.Head
+    visualMesh.Name = "VisualMesh"
+    
+    if originalMesh and originalMesh.MeshId and originalMesh.MeshId ~= "" then
+        visualMesh.MeshId = originalMesh.MeshId
+        visualMesh.TextureId = originalMesh.TextureId or ""
+    end
+    
+    visualMesh.Scale = Vector3.new(
+        (originalSize.X or 2) / newSize,
+        (originalSize.Y or 1) / newSize,
+        (originalSize.Z or 1) / newSize
+    )
+    visualMesh.Parent = head
+    
+    if originalDecal then
+        originalDecal.Parent = head
     end
     
     modifiedCharacters[character] = {
@@ -104,30 +234,11 @@ local function transformHead(character)
         originalSize = originalSize,
         originalColor = originalColor,
         originalMaterial = originalMaterial,
+        originalShape = originalShape,
         originalTransparency = originalTransparency,
-        savedMesh = savedMesh,
-        savedDecal = savedDecal,
+        savedMesh = originalMesh,
+        savedDecal = originalDecal,
     }
-    
-    head.Size = Vector3.new(Config.HitboxSize, Config.HitboxSize, Config.HitboxSize)
-    head.Shape = Enum.PartType.Ball
-    head.Transparency = 1
-    head.CanCollide = false
-    head.Massless = true
-    
-    local visualMesh = Instance.new("SpecialMesh")
-    visualMesh.MeshType = Enum.MeshType.Head
-    visualMesh.Name = "VisualMesh"
-    visualMesh.Scale = Vector3.new(
-        2 / Config.HitboxSize,
-        1 / Config.HitboxSize,
-        1 / Config.HitboxSize
-    )
-    visualMesh.Parent = head
-    
-    head.Color = originalColor
-    head.Material = originalMaterial
-    head.Transparency = 0
 end
 
 local function restoreHead(character)
@@ -150,9 +261,10 @@ local function restoreHead(character)
         
         head.Size = data.originalSize or Vector3.new(2, 1, 1)
         head.Transparency = data.originalTransparency or 0
-        head.Shape = Enum.PartType.Block
+        head.Shape = data.originalShape or Enum.PartType.Block
         head.Color = data.originalColor
         head.Material = data.originalMaterial
+        head.CastShadow = true
     end
     
     modifiedCharacters[character] = nil
@@ -168,14 +280,16 @@ local function updateHitboxSize(newSize)
             
             local visualMesh = head:FindFirstChild("VisualMesh")
             if visualMesh then
+                local origSize = data.originalSize or Vector3.new(2, 1, 1)
                 visualMesh.Scale = Vector3.new(
-                    2 / Config.HitboxSize,
-                    1 / Config.HitboxSize,
-                    1 / Config.HitboxSize
+                    origSize.X / Config.HitboxSize,
+                    origSize.Y / Config.HitboxSize,
+                    origSize.Z / Config.HitboxSize
                 )
             end
         end
     end
+    persistConfig()
 end
 
 local function setHitboxEnabled(enabled)
@@ -196,6 +310,7 @@ local function setHitboxEnabled(enabled)
             restoreHead(character)
         end
     end
+    persistConfig()
 end
 
 -- ═══════════════════════════════════════════════════════════════
@@ -351,6 +466,7 @@ local function setESPEnabled(enabled)
             end
         end
     end
+    persistConfig()
 end
 
 -- ═══════════════════════════════════════════════════════════════
@@ -371,6 +487,7 @@ local aimbotIsHolding = false
 local function setAimbotEnabled(enabled)
     Config.AimbotEnabled = enabled
     aimbotFOVRing.Visible = enabled and Config.AimbotDrawFOV
+    persistConfig()
 end
 
 local function getClosestTargetInFOV()
@@ -523,8 +640,8 @@ screenGui.Parent = guiParent
 
 local mainFrame = Instance.new("Frame")
 mainFrame.Name = "MainFrame"
-mainFrame.Size = UDim2.new(0, 400, 0, 720)
-mainFrame.Position = UDim2.new(0.5, -200, 0.5, -360)
+mainFrame.Size = UDim2.new(0, 440, 0, 720)
+mainFrame.Position = UDim2.new(0.5, -220, 0.5, -360)
 mainFrame.BackgroundColor3 = THEME.Background
 mainFrame.BorderSizePixel = 0
 mainFrame.Visible = false
@@ -654,6 +771,59 @@ contentLayout.Padding = UDim.new(0, 5)
 contentLayout.SortOrder = Enum.SortOrder.LayoutOrder
 contentLayout.Parent = content
 
+-- ═══ SISTEMA DE HOTKEY ═══
+-- Um único listener global: quando um botão de keybind entra em modo "listening",
+-- ele captura o próximo input
+local activeKeybindListener = nil  -- { button, callback, defaultText }
+
+local function startKeybindListening(button, onKeySelected, defaultText)
+    if activeKeybindListener then
+        -- Cancela o anterior
+        activeKeybindListener.button.Text = activeKeybindListener.defaultText
+        activeKeybindListener = nil
+    end
+    
+    button.Text = "..."
+    activeKeybindListener = {
+        button = button,
+        callback = onKeySelected,
+        defaultText = defaultText,
+    }
+end
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if not activeKeybindListener then return end
+    if input.UserInputType ~= Enum.UserInputType.Keyboard and 
+       input.UserInputType ~= Enum.UserInputType.MouseButton then return end
+    
+    local keyCode = input.KeyCode
+    local keyName
+    
+    if input.UserInputType == Enum.UserInputType.MouseButton then
+        keyName = input.UserInputType.Name
+        keyCode = nil
+    else
+        keyName = keyCode.Name
+    end
+    
+    -- ESC cancela
+    if keyCode == Enum.KeyCode.Escape then
+        activeKeybindListener.button.Text = activeKeybindListener.defaultText
+        activeKeybindListener = nil
+        return
+    end
+    
+    -- Aplica
+    local listener = activeKeybindListener
+    activeKeybindListener = nil
+    listener.button.Text = keyName
+    if listener.callback then
+        listener.callback(keyCode, keyName)
+    end
+end)
+
+-- ═══ COMPONENTES ═══
+
 local function makeSection(title)
     local section = Instance.new("Frame")
     section.Name = "Section_" .. title
@@ -695,7 +865,8 @@ local function makeSection(title)
     return section
 end
 
-local function makeToggle(parent, text, initialValue, callback)
+-- Toggle com hotkey opcional
+local function makeToggle(parent, text, initialValue, callback, hotkeyId)
     local frame = Instance.new("Frame")
     frame.Name = text
     frame.Size = UDim2.new(1, 0, 0, 32)
@@ -714,7 +885,7 @@ local function makeToggle(parent, text, initialValue, callback)
     stroke.Parent = frame
     
     local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1, -70, 1, 0)
+    label.Size = UDim2.new(1, -140, 1, 0)
     label.Position = UDim2.new(0, 12, 0, 0)
     label.BackgroundTransparency = 1
     label.Font = Enum.Font.Gotham
@@ -725,6 +896,48 @@ local function makeToggle(parent, text, initialValue, callback)
     label.ZIndex = 4
     label.Parent = frame
     
+    local state = initialValue
+    
+    -- Botão de hotkey
+    local hotkeyBtn
+    if hotkeyId then
+        hotkeyBtn = Instance.new("TextButton")
+        hotkeyBtn.Size = UDim2.new(0, 60, 0, 22)
+        hotkeyBtn.Position = UDim2.new(1, -132, 0.5, -11)
+        hotkeyBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+        hotkeyBtn.Text = Config.Hotkeys[hotkeyId] or "None"
+        hotkeyBtn.TextColor3 = THEME.SubText
+        hotkeyBtn.Font = Enum.Font.GothamBold
+        hotkeyBtn.TextSize = 10
+        hotkeyBtn.AutoButtonColor = false
+        hotkeyBtn.ZIndex = 4
+        hotkeyBtn.Parent = frame
+        
+        local hkCorner = Instance.new("UICorner")
+        hkCorner.CornerRadius = UDim.new(0, 3)
+        hkCorner.Parent = hotkeyBtn
+        
+        local hkStroke = Instance.new("UIStroke")
+        hkStroke.Color = THEME.BorderLight
+        hkStroke.Thickness = 1
+        hkStroke.Parent = hotkeyBtn
+        
+        hotkeyBtn.MouseEnter:Connect(function()
+            TweenService:Create(hotkeyBtn, TweenInfo.new(0.15), {BackgroundColor3 = THEME.PanelLight}):Play()
+        end)
+        hotkeyBtn.MouseLeave:Connect(function()
+            TweenService:Create(hotkeyBtn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(25, 25, 25)}):Play()
+        end)
+        
+        hotkeyBtn.MouseButton1Click:Connect(function()
+            startKeybindListening(hotkeyBtn, function(keyCode, keyName)
+                Config.Hotkeys[hotkeyId] = keyName
+                persistConfig()
+            end, Config.Hotkeys[hotkeyId] or "None")
+        end)
+    end
+    
+    -- Botão toggle
     local toggle = Instance.new("TextButton")
     toggle.Size = UDim2.new(0, 50, 0, 22)
     toggle.Position = UDim2.new(1, -62, 0.5, -11)
@@ -745,8 +958,6 @@ local function makeToggle(parent, text, initialValue, callback)
     toggleStroke.Color = THEME.BorderLight
     toggleStroke.Thickness = 1
     toggleStroke.Parent = toggle
-    
-    local state = initialValue
     
     local function update()
         if state then
@@ -900,7 +1111,7 @@ local function makeSlider(parent, text, minVal, maxVal, initialValue, callback)
     end
 end
 
--- ═══ SELETOR CICLO (substitui dropdown - sem bugs) ═══
+-- Dropdown (ciclo)
 local function makeDropdown(parent, text, options, initialValue, callback)
     local frame = Instance.new("Frame")
     frame.Name = text
@@ -986,6 +1197,7 @@ local function makeDropdown(parent, text, options, initialValue, callback)
             currentIndex = 1
         end
         updateDisplay()
+        persistConfig()
     end)
     
     return function(v)
@@ -1016,7 +1228,7 @@ makeSection("HITBOX")
 
 local setHitboxToggle = makeToggle(content, "Hitbox Ativada", Config.HitboxEnabled, function(v)
     setHitboxEnabled(v)
-end)
+end, "HitboxToggle")
 
 local setHitboxSizeSlider = makeSlider(content, "Tamanho da Hitbox", 1, 500, Config.HitboxSize, function(v)
     updateHitboxSize(v)
@@ -1026,7 +1238,7 @@ makeSection("ESP")
 
 local setESPToggle = makeToggle(content, "ESP Ativado", Config.ESPEnabled, function(v)
     setESPEnabled(v)
-end)
+end, "ESPToggle")
 
 local setESPDistance = makeSlider(content, "Distancia Maxima", 50, 5000, Config.MaxDistance, function(v)
     Config.MaxDistance = v
@@ -1056,7 +1268,7 @@ makeSection("AIMBOT (OPCIONAL)")
 
 local setAimbotToggle = makeToggle(content, "Aimbot Ativado", Config.AimbotEnabled, function(v)
     setAimbotEnabled(v)
-end)
+end, "AimbotToggle")
 
 local setAimbotFOV = makeSlider(content, "FOV (Raio)", 10, 300, Config.AimbotFOV, function(v)
     Config.AimbotFOV = v
@@ -1082,11 +1294,112 @@ local setAimbotDrawFOV = makeToggle(content, "Mostrar Circulo FOV", Config.Aimbo
     aimbotFOVRing.Visible = Config.AimbotEnabled and v
 end)
 
+-- ═══ SEÇÃO DE HOTKEYS GLOBAIS ═══
+makeSection("HOTKEYS")
+
+local function makeKeybindRow(parent, label, keyGetter, keySetter)
+    local frame = Instance.new("Frame")
+    frame.Name = label
+    frame.Size = UDim2.new(1, 0, 0, 32)
+    frame.BackgroundColor3 = THEME.Panel
+    frame.BorderSizePixel = 0
+    frame.ZIndex = 3
+    frame.Parent = parent
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 3)
+    corner.Parent = frame
+    
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = THEME.Border
+    stroke.Thickness = 1
+    stroke.Parent = frame
+    
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, -100, 1, 0)
+    lbl.Position = UDim2.new(0, 12, 0, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Font = Enum.Font.Gotham
+    lbl.Text = label
+    lbl.TextColor3 = THEME.Text
+    lbl.TextSize = 12
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.ZIndex = 4
+    lbl.Parent = frame
+    
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 80, 0, 22)
+    btn.Position = UDim2.new(1, -92, 0.5, -11)
+    btn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    btn.Text = keyGetter()
+    btn.TextColor3 = THEME.Accent2
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 11
+    btn.AutoButtonColor = false
+    btn.ZIndex = 4
+    btn.Parent = frame
+    
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.CornerRadius = UDim.new(0, 3)
+    btnCorner.Parent = btn
+    
+    local btnStroke = Instance.new("UIStroke")
+    btnStroke.Color = THEME.BorderLight
+    btnStroke.Thickness = 1
+    btnStroke.Parent = btn
+    
+    btn.MouseEnter:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundColor3 = THEME.PanelLight}):Play()
+    end)
+    btn.MouseLeave:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(30, 30, 30)}):Play()
+    end)
+    
+    btn.MouseButton1Click:Connect(function()
+        startKeybindListening(btn, function(keyCode, keyName)
+            keySetter(keyCode, keyName)
+            persistConfig()
+        end, keyGetter())
+    end)
+    
+    return btn
+end
+
+makeKeybindRow(content, "Ligar/Desligar Tudo", function()
+    return keyToString(Config.KeybindToggleAll)
+end, function(keyCode)
+    if keyCode then Config.KeybindToggleAll = keyCode end
+end)
+
+makeKeybindRow(content, "Abrir/Fechar GUI", function()
+    return keyToString(Config.KeybindToggleGUI)
+end, function(keyCode)
+    if keyCode then Config.KeybindToggleGUI = keyCode end
+end)
+
+makeKeybindRow(content, "Toggle Hitbox", function()
+    return keyToString(Config.KeybindToggleHitbox)
+end, function(keyCode)
+    if keyCode then Config.KeybindToggleHitbox = keyCode end
+end)
+
+makeKeybindRow(content, "Toggle ESP", function()
+    return keyToString(Config.KeybindToggleESP)
+end, function(keyCode)
+    if keyCode then Config.KeybindToggleESP = keyCode end
+end)
+
+makeKeybindRow(content, "Toggle Aimbot", function()
+    return keyToString(Config.KeybindToggleAimbot)
+end, function(keyCode)
+    if keyCode then Config.KeybindToggleAimbot = keyCode end
+end)
+
 local footer = Instance.new("TextLabel")
 footer.Size = UDim2.new(1, 0, 0, 40)
 footer.BackgroundTransparency = 1
 footer.Font = Enum.Font.Gotham
-footer.Text = "ALT = GUI    |    K = Tudo    |    RS = Aimbot"
+footer.Text = "Clique numa tecla pra remapear | ESC cancela"
 footer.TextColor3 = THEME.SubText
 footer.TextSize = 10
 footer.TextWrapped = true
@@ -1125,20 +1438,24 @@ titleBar.InputChanged:Connect(function(input)
 end)
 
 -- ═══════════════════════════════════════════════════════════════
--- KEYBINDS
+-- HOTKEY HANDLER (verifica as teclas configuradas + hotkeys por opção)
 -- ═══════════════════════════════════════════════════════════════
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
+    if activeKeybindListener then return end  -- não interfere quando está remapeando
     if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
     
     local key = input.KeyCode
+    local keyName = key.Name
     
+    -- Toggle GUI
     if key == Config.KeybindToggleGUI then
         mainFrame.Visible = not mainFrame.Visible
         return
     end
     
+    -- Toggle All
     if key == Config.KeybindToggleAll then
         local newState = not (Config.HitboxEnabled and Config.ESPEnabled)
         setHitboxEnabled(newState)
@@ -1149,7 +1466,24 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
         return
     end
     
-    if key == Config.AimbotToggleKey then
+    -- Toggle Hitbox
+    if key == Config.KeybindToggleHitbox then
+        local newState = not Config.HitboxEnabled
+        setHitboxEnabled(newState)
+        if setHitboxToggle then setHitboxToggle(newState) end
+        return
+    end
+    
+    -- Toggle ESP
+    if key == Config.KeybindToggleESP then
+        local newState = not Config.ESPEnabled
+        setESPEnabled(newState)
+        if setESPToggle then setESPToggle(newState) end
+        return
+    end
+    
+    -- Toggle Aimbot
+    if key == Config.KeybindToggleAimbot then
         if Config.AimbotMode == "Toggle" then
             local newState = not Config.AimbotEnabled
             setAimbotEnabled(newState)
@@ -1160,20 +1494,32 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
         return
     end
     
-    if key == Config.AimbotHoldKey and Config.AimbotMode == "Hold" then
-        aimbotIsHolding = true
-        return
+    -- ═══ HOTKEYS PERSONALIZADAS POR OPÇÃO ═══
+    if Config.Hotkeys then
+        for id, keyName2 in pairs(Config.Hotkeys) do
+            if keyName2 and keyName2 ~= "" and keyName2 ~= "None" and keyName == keyName2 then
+                if id == "HitboxToggle" then
+                    local newState = not Config.HitboxEnabled
+                    setHitboxEnabled(newState)
+                    if setHitboxToggle then setHitboxToggle(newState) end
+                elseif id == "ESPToggle" then
+                    local newState = not Config.ESPEnabled
+                    setESPEnabled(newState)
+                    if setESPToggle then setESPToggle(newState) end
+                elseif id == "AimbotToggle" then
+                    local newState = not Config.AimbotEnabled
+                    setAimbotEnabled(newState)
+                    if setAimbotToggle then setAimbotToggle(newState) end
+                end
+            end
+        end
     end
 end)
 
 UserInputService.InputEnded:Connect(function(input)
     if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
     
-    if input.KeyCode == Config.AimbotToggleKey and Config.AimbotMode == "Hold" then
-        aimbotIsHolding = false
-    end
-    
-    if input.KeyCode == Config.AimbotHoldKey then
+    if input.KeyCode == Config.KeybindToggleAimbot and Config.AimbotMode == "Hold" then
         aimbotIsHolding = false
     end
 end)
@@ -1258,5 +1604,8 @@ print("════════════════════════�
 print("[Lxzinn__ H-E Menu] Carregado!")
 print("[ALT] Abrir/Fechar GUI")
 print("[K] Ligar/Desligar TUDO")
+print("[H] Toggle Hitbox")
+print("[J] Toggle ESP")
 print("[RS] Toggle Aimbot")
+print("Arquivo de config: " .. CONFIG_FILE)
 print("═════════════════════════════════════")
