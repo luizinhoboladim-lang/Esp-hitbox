@@ -1,13 +1,13 @@
 -- ═══════════════════════════════════════════════════════════════
--- Lxzinn__ H-E Menu
--- ALT = Abrir/Fechar GUI | K = Ligar/Desligar Tudo
--- Hotkeys por opção com salvamento persistente
+-- Lxzinn__ H-E Menu v3.2 - CORRIGIDO
+-- Abas: Aimbot | ESP | Hitbox | Hotkeys | Config
 -- ═══════════════════════════════════════════════════════════════
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
+local HttpService = game:GetService("HttpService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
@@ -23,45 +23,34 @@ end
 
 local function saveConfig(tbl)
     if hasFileAPI() then
-        pcall(function()
-            writefile(CONFIG_FILE, game:GetService("HttpService"):JSONEncode(tbl))
-        end)
+        pcall(function() writefile(CONFIG_FILE, HttpService:JSONEncode(tbl)) end)
     end
 end
 
 local function loadConfig()
     if hasFileAPI() then
         local ok, data = pcall(function()
-            if isfile(CONFIG_FILE) then
-                return game:GetService("HttpService"):JSONDecode(readfile(CONFIG_FILE))
-            end
+            if isfile(CONFIG_FILE) then return HttpService:JSONDecode(readfile(CONFIG_FILE)) end
         end)
-        if ok and type(data) == "table" then
-            return data
-        end
+        if ok and type(data) == "table" then return data end
     end
     return nil
 end
 
--- Converte KeyCode <-> String (pra salvar em JSON)
 local function keyToString(keyCode)
-    if typeof(keyCode) == "EnumItem" then
-        return keyCode.Name
-    end
+    if typeof(keyCode) == "EnumItem" then return keyCode.Name end
     return tostring(keyCode)
 end
 
 local function stringToKey(str)
     if not str then return nil end
-    local ok, key = pcall(function()
-        return Enum.KeyCode[str]
-    end)
+    local ok, key = pcall(function() return Enum.KeyCode[str] end)
     if ok then return key end
     return nil
 end
 
 -- ═══════════════════════════════════════════════════════════════
--- CONFIGURAÇÕES (com carregamento persistente)
+-- CONFIGURAÇÕES
 -- ═══════════════════════════════════════════════════════════════
 
 local DEFAULT_CONFIG = {
@@ -69,16 +58,16 @@ local DEFAULT_CONFIG = {
     HitboxSize = 15,
     
     ESPEnabled = true,
-    ShowLocal = false,
+    ShowTeam = false,
+    ShowEnemies = true,
+    HighlightEnemies = true,
+    ShowDead = false,
     MaxDistance = 2000,
-    ShowNPCs = true,
-    BillboardName = "ESP_Billboard_v1",
-    MaxNameLength = 12,
-    
+    ShowNPCs = false,
     NameFontSize = 16,
     NameTransparency = 0.45,
-    
-    UpdateRate = 0.1,
+    MaxNameLength = 24,
+    BillboardName = "ESP_Billboard_v1",
     
     AimbotEnabled = false,
     AimbotFOV = 40,
@@ -86,6 +75,10 @@ local DEFAULT_CONFIG = {
     AimbotTarget = "Head",
     AimbotDrawFOV = true,
     AimbotMode = "Toggle",
+    AimbotTeamCheck = true,
+    AimbotIgnoreDead = true,
+    
+    UpdateRate = 0.1,
     
     KeybindToggleAll = "K",
     KeybindToggleGUI = "LeftAlt",
@@ -93,10 +86,13 @@ local DEFAULT_CONFIG = {
     KeybindToggleESP = "J",
     KeybindToggleAimbot = "RightShift",
     
-    Hotkeys = {},  -- armazena strings
+    Hotkeys = {},
+    
+    CurrentTab = "Aimbot",
+    MenuPosition = {X = 0.5, Y = 0.5},
+    ThemeMode = "black",
 }
 
--- Carrega config salva
 local saved = loadConfig() or {}
 getgenv().Config = getgenv().Config or {}
 
@@ -106,39 +102,48 @@ for key, defaultVal in pairs(DEFAULT_CONFIG) do
     end
 end
 
--- Converte strings de volta pra KeyCode
 local Config = getgenv().Config
+
 Config.KeybindToggleAll = stringToKey(Config.KeybindToggleAll) or Enum.KeyCode.K
 Config.KeybindToggleGUI = stringToKey(Config.KeybindToggleGUI) or Enum.KeyCode.LeftAlt
 Config.KeybindToggleHitbox = stringToKey(Config.KeybindToggleHitbox) or Enum.KeyCode.H
 Config.KeybindToggleESP = stringToKey(Config.KeybindToggleESP) or Enum.KeyCode.J
 Config.KeybindToggleAimbot = stringToKey(Config.KeybindToggleAimbot) or Enum.KeyCode.RightShift
 Config.Hotkeys = Config.Hotkeys or {}
+Config.MenuPosition = Config.MenuPosition or {X = 0.5, Y = 0.5}
 
--- Salva tudo
 local function persistConfig()
     local toSave = {
         HitboxEnabled = Config.HitboxEnabled,
         HitboxSize = Config.HitboxSize,
         ESPEnabled = Config.ESPEnabled,
-        ShowLocal = Config.ShowLocal,
+        ShowTeam = Config.ShowTeam,
+        ShowEnemies = Config.ShowEnemies,
+        HighlightEnemies = Config.HighlightEnemies,
+        ShowDead = Config.ShowDead,
         MaxDistance = Config.MaxDistance,
         ShowNPCs = Config.ShowNPCs,
         NameFontSize = Config.NameFontSize,
         NameTransparency = Config.NameTransparency,
-        UpdateRate = Config.UpdateRate,
+        MaxNameLength = Config.MaxNameLength,
         AimbotEnabled = Config.AimbotEnabled,
         AimbotFOV = Config.AimbotFOV,
         AimbotSmoothness = Config.AimbotSmoothness,
         AimbotTarget = Config.AimbotTarget,
         AimbotDrawFOV = Config.AimbotDrawFOV,
         AimbotMode = Config.AimbotMode,
+        AimbotTeamCheck = Config.AimbotTeamCheck,
+        AimbotIgnoreDead = Config.AimbotIgnoreDead,
+        UpdateRate = Config.UpdateRate,
         KeybindToggleAll = keyToString(Config.KeybindToggleAll),
         KeybindToggleGUI = keyToString(Config.KeybindToggleGUI),
         KeybindToggleHitbox = keyToString(Config.KeybindToggleHitbox),
         KeybindToggleESP = keyToString(Config.KeybindToggleESP),
         KeybindToggleAimbot = keyToString(Config.KeybindToggleAimbot),
         Hotkeys = Config.Hotkeys,
+        CurrentTab = Config.CurrentTab,
+        MenuPosition = Config.MenuPosition,
+        ThemeMode = Config.ThemeMode,
     }
     saveConfig(toSave)
 end
@@ -150,6 +155,7 @@ end
 local modifiedCharacters = {}
 local targetCache = {}
 local activeTargets = {}
+local myTeam = nil
 
 -- ═══════════════════════════════════════════════════════════════
 -- UTILITÁRIOS
@@ -157,15 +163,39 @@ local activeTargets = {}
 
 local function shortenName(name, maxLen)
     if not name then return "" end
-    maxLen = maxLen or 12
+    maxLen = maxLen or 24
     if #name > maxLen then
         return string.sub(name, 1, maxLen - 3) .. "..."
     end
     return name
 end
 
+local function updateMyTeam()
+    myTeam = LocalPlayer.Team
+end
+
+local function isAlly(player)
+    if player == LocalPlayer then return true end
+    if not myTeam then updateMyTeam() end
+    if myTeam and player.Team then
+        return player.Team == myTeam
+    end
+    return false
+end
+
+local function isDeadPlayer(player)
+    if player == LocalPlayer then return false end
+    local char = player.Character
+    if not char then return true end
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return true end
+    if humanoid.Health <= 0 then return true end
+    if humanoid:GetState() == Enum.HumanoidStateType.Dead then return true end
+    return false
+end
+
 -- ═══════════════════════════════════════════════════════════════
--- HITBOX EXPANDER (MÉTODO ULTRA-LEVE)
+-- HITBOX
 -- ═══════════════════════════════════════════════════════════════
 
 local function transformHead(character)
@@ -225,9 +255,7 @@ local function transformHead(character)
     )
     visualMesh.Parent = head
     
-    if originalDecal then
-        originalDecal.Parent = head
-    end
+    if originalDecal then originalDecal.Parent = head end
     
     modifiedCharacters[character] = {
         head = head,
@@ -248,16 +276,10 @@ local function restoreHead(character)
     local head = data.head
     if head and head.Parent then
         local visualMesh = head:FindFirstChild("VisualMesh")
-        if visualMesh then
-            visualMesh:Destroy()
-        end
+        if visualMesh then visualMesh:Destroy() end
         
-        if data.savedMesh then
-            data.savedMesh:Clone().Parent = head
-        end
-        if data.savedDecal then
-            data.savedDecal:Clone().Parent = head
-        end
+        if data.savedMesh then data.savedMesh:Clone().Parent = head end
+        if data.savedDecal then data.savedDecal:Clone().Parent = head end
         
         head.Size = data.originalSize or Vector3.new(2, 1, 1)
         head.Transparency = data.originalTransparency or 0
@@ -277,7 +299,6 @@ local function updateHitboxSize(newSize)
         local head = data.head
         if head and head.Parent then
             head.Size = Vector3.new(Config.HitboxSize, Config.HitboxSize, Config.HitboxSize)
-            
             local visualMesh = head:FindFirstChild("VisualMesh")
             if visualMesh then
                 local origSize = data.originalSize or Vector3.new(2, 1, 1)
@@ -314,17 +335,23 @@ local function setHitboxEnabled(enabled)
 end
 
 -- ═══════════════════════════════════════════════════════════════
--- ESP SYSTEM
+-- ESP
 -- ═══════════════════════════════════════════════════════════════
 
-local function applyBillboardStyle(billboard, label)
+local COLOR_ALLY = Color3.fromRGB(60, 190, 110)
+local COLOR_ENEMY = Color3.fromRGB(255, 80, 80)
+local COLOR_NEUTRAL = Color3.fromRGB(240, 240, 240)
+local COLOR_DEAD = Color3.fromRGB(120, 120, 120)
+
+local function applyBillboardStyle(billboard, label, color)
     if not billboard or not label then return end
     
     label.TextSize = Config.NameFontSize
     label.TextTransparency = Config.NameTransparency
     label.TextStrokeTransparency = math.min(1, Config.NameTransparency + 0.2)
+    label.TextColor3 = color or COLOR_NEUTRAL
     
-    billboard.Size = UDim2.new(0, 140, 0, math.max(24, Config.NameFontSize + 12))
+    billboard.Size = UDim2.new(0, 200, 0, math.max(24, Config.NameFontSize + 12))
 end
 
 local function createBillboard(head)
@@ -333,14 +360,14 @@ local function createBillboard(head)
     local existing = head:FindFirstChild(Config.BillboardName)
     if existing then
         local label = existing:FindFirstChild("Label")
-        applyBillboardStyle(existing, label)
+        if label then applyBillboardStyle(existing, label) end
         return existing
     end
     
     local billboard = Instance.new("BillboardGui")
     billboard.Name = Config.BillboardName
     billboard.Adornee = head
-    billboard.Size = UDim2.new(0, 140, 0, 28)
+    billboard.Size = UDim2.new(0, 200, 0, 28)
     billboard.StudsOffset = Vector3.new(0, 2.2, 0)
     billboard.AlwaysOnTop = true
     billboard.ResetOnSpawn = false
@@ -350,16 +377,15 @@ local function createBillboard(head)
     label.Name = "Label"
     label.Size = UDim2.new(1, 0, 1, 0)
     label.BackgroundTransparency = 1
-    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.TextColor3 = COLOR_NEUTRAL
     label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-    label.TextStrokeTransparency = 0
+    label.TextStrokeTransparency = 0.4
     label.Font = Enum.Font.GothamBold
     label.TextScaled = false
+    label.TextSize = Config.NameFontSize
     label.RichText = false
     label.Text = ""
     label.Parent = billboard
-    
-    applyBillboardStyle(billboard, label)
     
     billboard.Parent = head
     return billboard
@@ -390,9 +416,7 @@ end
 local function removeTarget(character)
     local data = targetCache[character]
     if data then
-        if data.billboard then
-            data.billboard:Destroy()
-        end
+        if data.billboard then data.billboard:Destroy() end
         targetCache[character] = nil
         
         for i, c in ipairs(activeTargets) do
@@ -411,6 +435,7 @@ local function updateTarget(character)
     local head = data.head
     local billboard = data.billboard
     local label = data.label
+    local player = data.player
     
     if not head or not head.Parent then
         removeTarget(character)
@@ -427,10 +452,46 @@ local function updateTarget(character)
     if not billboard or not label then return end
     
     if not Config.ESPEnabled then
-        if billboard.Enabled then
-            billboard.Enabled = false
-        end
+        if billboard.Enabled then billboard.Enabled = false end
         return
+    end
+    
+    if player then
+        if player == LocalPlayer then
+            if billboard.Enabled then billboard.Enabled = false end
+            return
+        end
+        
+        local ally = isAlly(player)
+        local dead = isDeadPlayer(player)
+        
+        if ally and not Config.ShowTeam then
+            if billboard.Enabled then billboard.Enabled = false end
+            return
+        end
+        
+        if not ally and not Config.ShowEnemies then
+            if billboard.Enabled then billboard.Enabled = false end
+            return
+        end
+        
+        if dead and not Config.ShowDead then
+            if billboard.Enabled then billboard.Enabled = false end
+            return
+        end
+        
+        local color
+        if dead then
+            color = COLOR_DEAD
+        elseif ally then
+            color = COLOR_ALLY
+        elseif Config.HighlightEnemies then
+            color = COLOR_ENEMY
+        else
+            color = COLOR_NEUTRAL
+        end
+        
+        applyBillboardStyle(billboard, label, color)
     end
     
     if Config.MaxDistance and Config.MaxDistance > 0 then
@@ -439,20 +500,18 @@ local function updateTarget(character)
         if myRoot then
             local dist = (head.Position - myRoot.Position).Magnitude
             if dist > Config.MaxDistance then
-                if billboard.Enabled then
-                    billboard.Enabled = false
-                end
+                if billboard.Enabled then billboard.Enabled = false end
                 return
             end
         end
     end
     
-    if not billboard.Enabled then
-        billboard.Enabled = true
-    end
-    
     if label.Text ~= data.shortName then
         label.Text = data.shortName
+    end
+    
+    if not billboard.Enabled then
+        billboard.Enabled = true
     end
 end
 
@@ -461,9 +520,7 @@ local function setESPEnabled(enabled)
     
     if not enabled then
         for _, data in pairs(targetCache) do
-            if data.billboard then
-                data.billboard.Enabled = false
-            end
+            if data.billboard then data.billboard.Enabled = false end
         end
     end
     persistConfig()
@@ -497,16 +554,22 @@ local function getClosestTargetInFOV()
     
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character then
-            local part = player.Character:FindFirstChild(Config.AimbotTarget)
-            if part then
-                local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
-                if humanoid and humanoid.Health > 0 then
-                    local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
-                    if onScreen then
-                        local dist = (Vector2.new(screenPos.X, screenPos.Y) - centerPos).Magnitude
-                        if dist < lastDist and dist < Config.AimbotFOV then
-                            lastDist = dist
-                            closest = player
+            local canTarget = true
+            if Config.AimbotIgnoreDead and isDeadPlayer(player) then canTarget = false end
+            if Config.AimbotTeamCheck and isAlly(player) then canTarget = false end
+            
+            if canTarget then
+                local part = player.Character:FindFirstChild(Config.AimbotTarget)
+                if part then
+                    local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+                    if humanoid and humanoid.Health > 0 then
+                        local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
+                        if onScreen then
+                            local dist = (Vector2.new(screenPos.X, screenPos.Y) - centerPos).Magnitude
+                            if dist < lastDist and dist < Config.AimbotFOV then
+                                lastDist = dist
+                                closest = player
+                            end
                         end
                     end
                 end
@@ -534,7 +597,6 @@ RunService.RenderStepped:Connect(function()
             local targetPos = targetPart.Position
             local lookVector = (targetPos - camPos).Unit
             local newCFrame = CFrame.new(camPos, camPos + lookVector)
-            
             local smooth = math.clamp(Config.AimbotSmoothness, 0, 1)
             Camera.CFrame = Camera.CFrame:Lerp(newCFrame, 1 - smooth)
         end
@@ -542,7 +604,7 @@ RunService.RenderStepped:Connect(function()
 end)
 
 -- ═══════════════════════════════════════════════════════════════
--- GERENCIAMENTO DE JOGADORES
+-- GERENCIAMENTO DE PLAYERS
 -- ═══════════════════════════════════════════════════════════════
 
 local function onCharacterAdded(player, character)
@@ -554,7 +616,7 @@ local function onCharacterAdded(player, character)
     
     if not character.Parent then return end
     
-    if player ~= LocalPlayer or Config.ShowLocal then
+    if player ~= LocalPlayer then
         setupTarget(character, player)
     end
     
@@ -564,14 +626,11 @@ local function onCharacterAdded(player, character)
     
     humanoid:GetPropertyChangedSignal("Sit"):Connect(function()
         if player == LocalPlayer then return end
-        
         if humanoid.Sit then
             restoreHead(character)
         elseif Config.HitboxEnabled then
             task.wait(0.3)
-            if character.Parent then
-                transformHead(character)
-            end
+            if character.Parent then transformHead(character) end
         end
     end)
 end
@@ -581,15 +640,11 @@ local function onCharacterRemoving(player, character)
     restoreHead(character)
 end
 
--- ═══════════════════════════════════════════════════════════════
--- LOOP PRINCIPAL
--- ═══════════════════════════════════════════════════════════════
-
 local function updateAll()
+    updateMyTeam()
     for i = #activeTargets, 1, -1 do
         local character = activeTargets[i]
         local data = targetCache[character]
-        
         if not data or not character.Parent then
             removeTarget(character)
         else
@@ -599,22 +654,61 @@ local function updateAll()
 end
 
 -- ═══════════════════════════════════════════════════════════════
--- GUI - TEMA BLACK
+-- TEMAS
 -- ═══════════════════════════════════════════════════════════════
 
-local THEME = {
-    Background = Color3.fromRGB(10, 10, 10),
-    Panel = Color3.fromRGB(16, 16, 16),
-    PanelLight = Color3.fromRGB(22, 22, 22),
-    Accent1 = Color3.fromRGB(114, 88, 255),
-    Accent2 = Color3.fromRGB(88, 180, 255),
-    Text = Color3.fromRGB(240, 240, 240),
-    SubText = Color3.fromRGB(140, 140, 145),
-    Danger = Color3.fromRGB(220, 60, 60),
-    Success = Color3.fromRGB(60, 190, 110),
-    Border = Color3.fromRGB(35, 35, 35),
-    BorderLight = Color3.fromRGB(50, 50, 50),
+local THEMES = {
+    black = {
+        Background = Color3.fromRGB(10, 10, 10),
+        Panel = Color3.fromRGB(16, 16, 16),
+        PanelLight = Color3.fromRGB(22, 22, 22),
+        Accent1 = Color3.fromRGB(114, 88, 255),
+        Accent2 = Color3.fromRGB(88, 180, 255),
+        Text = Color3.fromRGB(240, 240, 240),
+        SubText = Color3.fromRGB(140, 140, 145),
+        Danger = Color3.fromRGB(220, 60, 60),
+        Success = Color3.fromRGB(60, 190, 110),
+        Border = Color3.fromRGB(35, 35, 35),
+        BorderLight = Color3.fromRGB(50, 50, 50),
+    },
+    white = {
+        Background = Color3.fromRGB(245, 245, 248),
+        Panel = Color3.fromRGB(235, 235, 240),
+        PanelLight = Color3.fromRGB(225, 225, 232),
+        Accent1 = Color3.fromRGB(114, 88, 255),
+        Accent2 = Color3.fromRGB(88, 180, 255),
+        Text = Color3.fromRGB(20, 20, 25),
+        SubText = Color3.fromRGB(90, 90, 100),
+        Danger = Color3.fromRGB(220, 60, 60),
+        Success = Color3.fromRGB(60, 190, 110),
+        Border = Color3.fromRGB(200, 200, 210),
+        BorderLight = Color3.fromRGB(180, 180, 195),
+    },
 }
+
+local THEME = THEMES[Config.ThemeMode] or THEMES.black
+local themeElements = {}
+
+local function registerThemed(element, propName, themeKey)
+    table.insert(themeElements, {element = element, prop = propName, theme = themeKey})
+end
+
+local function applyTheme()
+    for _, entry in ipairs(themeElements) do
+        pcall(function()
+            entry.element[entry.prop] = THEME[entry.theme]
+        end)
+    end
+end
+
+-- ═══ Referências aos toggles visuais (para sincronização com hotkeys) ═══
+local setHitboxToggleVisual = nil
+local setESPToggleVisual = nil
+local setAimbotToggleVisual = nil
+
+-- ═══════════════════════════════════════════════════════════════
+-- GUI
+-- ═══════════════════════════════════════════════════════════════
 
 local guiParent
 local isCoreGui = false
@@ -640,14 +734,15 @@ screenGui.Parent = guiParent
 
 local mainFrame = Instance.new("Frame")
 mainFrame.Name = "MainFrame"
-mainFrame.Size = UDim2.new(0, 440, 0, 720)
-mainFrame.Position = UDim2.new(0.5, -220, 0.5, -360)
+mainFrame.Size = UDim2.new(0, 560, 0, 460)
+mainFrame.Position = UDim2.new(Config.MenuPosition.X, -280, Config.MenuPosition.Y, -230)
 mainFrame.BackgroundColor3 = THEME.Background
 mainFrame.BorderSizePixel = 0
 mainFrame.Visible = false
 mainFrame.ZIndex = 1
 mainFrame.ClipsDescendants = false
 mainFrame.Parent = screenGui
+registerThemed(mainFrame, "BackgroundColor3", "Background")
 
 local mainCorner = Instance.new("UICorner")
 mainCorner.CornerRadius = UDim.new(0, 4)
@@ -657,6 +752,7 @@ local mainStroke = Instance.new("UIStroke")
 mainStroke.Color = THEME.Border
 mainStroke.Thickness = 1
 mainStroke.Parent = mainFrame
+registerThemed(mainStroke, "Color", "Border")
 
 local shadow = Instance.new("ImageLabel")
 shadow.Name = "Shadow"
@@ -678,6 +774,7 @@ titleBar.BackgroundColor3 = THEME.Panel
 titleBar.BorderSizePixel = 0
 titleBar.ZIndex = 2
 titleBar.Parent = mainFrame
+registerThemed(titleBar, "BackgroundColor3", "Panel")
 
 local titleCorner = Instance.new("UICorner")
 titleCorner.CornerRadius = UDim.new(0, 4)
@@ -707,11 +804,6 @@ local titleIndicatorCorner = Instance.new("UICorner")
 titleIndicatorCorner.CornerRadius = UDim.new(0, 2)
 titleIndicatorCorner.Parent = titleIndicator
 
-local titleIndicatorGradient = Instance.new("UIGradient")
-titleIndicatorGradient.Rotation = 90
-titleIndicatorGradient.Color = ColorSequence.new(THEME.Accent1, THEME.Accent2)
-titleIndicatorGradient.Parent = titleIndicator
-
 local titleLabel = Instance.new("TextLabel")
 titleLabel.Name = "Title"
 titleLabel.Size = UDim2.new(1, -70, 1, 0)
@@ -724,12 +816,13 @@ titleLabel.TextSize = 14
 titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 titleLabel.ZIndex = 3
 titleLabel.Parent = titleBar
+registerThemed(titleLabel, "TextColor3", "Text")
 
 local closeButton = Instance.new("TextButton")
 closeButton.Name = "CloseButton"
 closeButton.Size = UDim2.new(0, 24, 0, 24)
 closeButton.Position = UDim2.new(1, -32, 0.5, -12)
-closeButton.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+closeButton.BackgroundColor3 = THEME.PanelLight
 closeButton.Text = "X"
 closeButton.TextColor3 = THEME.SubText
 closeButton.Font = Enum.Font.GothamBold
@@ -737,101 +830,167 @@ closeButton.TextSize = 12
 closeButton.AutoButtonColor = false
 closeButton.ZIndex = 3
 closeButton.Parent = titleBar
+registerThemed(closeButton, "BackgroundColor3", "PanelLight")
+registerThemed(closeButton, "TextColor3", "SubText")
 
 local closeCorner = Instance.new("UICorner")
 closeCorner.CornerRadius = UDim.new(0, 3)
 closeCorner.Parent = closeButton
 
-closeButton.MouseEnter:Connect(function()
-    TweenService:Create(closeButton, TweenInfo.new(0.15), {BackgroundColor3 = THEME.Danger, TextColor3 = Color3.new(1, 1, 1)}):Play()
-end)
-closeButton.MouseLeave:Connect(function()
-    TweenService:Create(closeButton, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(25, 25, 25), TextColor3 = THEME.SubText}):Play()
-end)
 closeButton.MouseButton1Click:Connect(function()
     mainFrame.Visible = false
 end)
 
-local content = Instance.new("ScrollingFrame")
-content.Name = "Content"
-content.Size = UDim2.new(1, -20, 1, -52)
-content.Position = UDim2.new(0, 10, 0, 44)
-content.BackgroundTransparency = 1
-content.BorderSizePixel = 0
-content.ScrollBarThickness = 3
-content.ScrollBarImageColor3 = THEME.Accent1
-content.CanvasSize = UDim2.new(0, 0, 0, 0)
-content.AutomaticCanvasSize = Enum.AutomaticSize.Y
-content.ClipsDescendants = true
-content.ZIndex = 2
-content.Parent = mainFrame
+local sidebar = Instance.new("Frame")
+sidebar.Name = "Sidebar"
+sidebar.Size = UDim2.new(0, 120, 1, -38)
+sidebar.Position = UDim2.new(0, 0, 0, 38)
+sidebar.BackgroundColor3 = THEME.Panel
+sidebar.BorderSizePixel = 0
+sidebar.ZIndex = 2
+sidebar.Parent = mainFrame
+registerThemed(sidebar, "BackgroundColor3", "Panel")
 
-local contentLayout = Instance.new("UIListLayout")
-contentLayout.Padding = UDim.new(0, 5)
-contentLayout.SortOrder = Enum.SortOrder.LayoutOrder
-contentLayout.Parent = content
+local sidebarPadding = Instance.new("UIPadding")
+sidebarPadding.PaddingTop = UDim.new(0, 8)
+sidebarPadding.PaddingBottom = UDim.new(0, 8)
+sidebarPadding.PaddingLeft = UDim.new(0, 8)
+sidebarPadding.PaddingRight = UDim.new(0, 8)
+sidebarPadding.Parent = sidebar
 
--- ═══ SISTEMA DE HOTKEY ═══
--- Um único listener global: quando um botão de keybind entra em modo "listening",
--- ele captura o próximo input
-local activeKeybindListener = nil  -- { button, callback, defaultText }
+local sidebarLayout = Instance.new("UIListLayout")
+sidebarLayout.Padding = UDim.new(0, 4)
+sidebarLayout.SortOrder = Enum.SortOrder.LayoutOrder
+sidebarLayout.Parent = sidebar
 
-local function startKeybindListening(button, onKeySelected, defaultText)
-    if activeKeybindListener then
-        -- Cancela o anterior
-        activeKeybindListener.button.Text = activeKeybindListener.defaultText
-        activeKeybindListener = nil
+local verticalSeparator = Instance.new("Frame")
+verticalSeparator.Size = UDim2.new(0, 1, 1, -38)
+verticalSeparator.Position = UDim2.new(0, 120, 0, 38)
+verticalSeparator.BackgroundColor3 = THEME.Border
+verticalSeparator.BorderSizePixel = 0
+verticalSeparator.ZIndex = 3
+verticalSeparator.Parent = mainFrame
+registerThemed(verticalSeparator, "BackgroundColor3", "Border")
+
+local contentArea = Instance.new("Frame")
+contentArea.Name = "ContentArea"
+contentArea.Size = UDim2.new(1, -121, 1, -38)
+contentArea.Position = UDim2.new(0, 121, 0, 38)
+contentArea.BackgroundTransparency = 1
+contentArea.ZIndex = 2
+contentArea.Parent = mainFrame
+
+local tabs = {}
+local tabButtons = {}
+local currentTabName = Config.CurrentTab or "Aimbot"
+
+local function switchTab(tabName)
+    for name, frame in pairs(tabs) do
+        frame.Visible = (name == tabName)
     end
-    
-    button.Text = "..."
-    activeKeybindListener = {
-        button = button,
-        callback = onKeySelected,
-        defaultText = defaultText,
-    }
+    for name, btn in pairs(tabButtons) do
+        if name == tabName then
+            btn.BackgroundColor3 = THEME.PanelLight
+            local label = btn:FindFirstChild("Label")
+            if label then label.TextColor3 = THEME.Accent2 end
+            local indicator = btn:FindFirstChild("Indicator")
+            if indicator then indicator.Visible = true end
+        else
+            btn.BackgroundColor3 = THEME.Panel
+            local label = btn:FindFirstChild("Label")
+            if label then label.TextColor3 = THEME.SubText end
+            local indicator = btn:FindFirstChild("Indicator")
+            if indicator then indicator.Visible = false end
+        end
+    end
+    currentTabName = tabName
+    Config.CurrentTab = tabName
+    persistConfig()
 end
 
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if not activeKeybindListener then return end
-    if input.UserInputType ~= Enum.UserInputType.Keyboard and 
-       input.UserInputType ~= Enum.UserInputType.MouseButton then return end
+local function createTabButton(name)
+    local btn = Instance.new("TextButton")
+    btn.Name = name
+    btn.Size = UDim2.new(1, 0, 0, 36)
+    btn.BackgroundColor3 = THEME.Panel
+    btn.Text = ""
+    btn.AutoButtonColor = false
+    btn.ZIndex = 3
+    btn.Parent = sidebar
+    registerThemed(btn, "BackgroundColor3", "Panel")
     
-    local keyCode = input.KeyCode
-    local keyName
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.CornerRadius = UDim.new(0, 3)
+    btnCorner.Parent = btn
     
-    if input.UserInputType == Enum.UserInputType.MouseButton then
-        keyName = input.UserInputType.Name
-        keyCode = nil
-    else
-        keyName = keyCode.Name
-    end
+    local indicator = Instance.new("Frame")
+    indicator.Name = "Indicator"
+    indicator.Size = UDim2.new(0, 3, 0, 20)
+    indicator.Position = UDim2.new(0, 0, 0.5, -10)
+    indicator.BackgroundColor3 = THEME.Accent1
+    indicator.BorderSizePixel = 0
+    indicator.ZIndex = 4
+    indicator.Visible = false
+    indicator.Parent = btn
     
-    -- ESC cancela
-    if keyCode == Enum.KeyCode.Escape then
-        activeKeybindListener.button.Text = activeKeybindListener.defaultText
-        activeKeybindListener = nil
-        return
-    end
+    local indicatorCorner = Instance.new("UICorner")
+    indicatorCorner.CornerRadius = UDim.new(0, 2)
+    indicatorCorner.Parent = indicator
     
-    -- Aplica
-    local listener = activeKeybindListener
-    activeKeybindListener = nil
-    listener.button.Text = keyName
-    if listener.callback then
-        listener.callback(keyCode, keyName)
-    end
-end)
+    local label = Instance.new("TextLabel")
+    label.Name = "Label"
+    label.Size = UDim2.new(1, -20, 1, 0)
+    label.Position = UDim2.new(0, 14, 0, 0)
+    label.BackgroundTransparency = 1
+    label.Font = Enum.Font.GothamBold
+    label.Text = name
+    label.TextColor3 = THEME.SubText
+    label.TextSize = 12
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.ZIndex = 4
+    label.Parent = btn
+    registerThemed(label, "TextColor3", "SubText")
+    
+    btn.MouseButton1Click:Connect(function()
+        switchTab(name)
+    end)
+    
+    tabButtons[name] = btn
+    return btn
+end
 
--- ═══ COMPONENTES ═══
+local function createTab(name)
+    local frame = Instance.new("ScrollingFrame")
+    frame.Name = name .. "Tab"
+    frame.Size = UDim2.new(1, -16, 1, -16)
+    frame.Position = UDim2.new(0, 8, 0, 8)
+    frame.BackgroundTransparency = 1
+    frame.BorderSizePixel = 0
+    frame.ScrollBarThickness = 3
+    frame.ScrollBarImageColor3 = THEME.Accent1
+    frame.CanvasSize = UDim2.new(0, 0, 0, 0)
+    frame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    frame.Visible = false
+    frame.ZIndex = 3
+    frame.Parent = contentArea
+    
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0, 6)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Parent = frame
+    
+    tabs[name] = frame
+    return frame
+end
 
-local function makeSection(title)
+local function makeSection(parent, title)
     local section = Instance.new("Frame")
-    section.Name = "Section_" .. title
-    section.Size = UDim2.new(1, 0, 0, 24)
+    section.Size = UDim2.new(1, 0, 0, 26)
     section.BackgroundColor3 = THEME.PanelLight
     section.BorderSizePixel = 0
     section.ZIndex = 3
-    section.Parent = content
+    section.Parent = parent
+    registerThemed(section, "BackgroundColor3", "PanelLight")
     
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0, 3)
@@ -841,6 +1000,7 @@ local function makeSection(title)
     stroke.Color = THEME.Border
     stroke.Thickness = 1
     stroke.Parent = section
+    registerThemed(stroke, "Color", "Border")
     
     local indicator = Instance.new("Frame")
     indicator.Size = UDim2.new(0, 2, 0, 12)
@@ -861,19 +1021,65 @@ local function makeSection(title)
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.ZIndex = 4
     label.Parent = section
+    registerThemed(label, "TextColor3", "Text")
     
     return section
 end
 
--- Toggle com hotkey opcional
+local activeKeybindListener = nil
+
+local function startKeybindListening(button, onKeySelected, defaultText)
+    if activeKeybindListener then
+        activeKeybindListener.button.Text = activeKeybindListener.defaultText
+    end
+    button.Text = "..."
+    activeKeybindListener = {
+        button = button,
+        callback = onKeySelected,
+        defaultText = defaultText,
+    }
+end
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if not activeKeybindListener then return end
+    if input.UserInputType ~= Enum.UserInputType.Keyboard and
+       input.UserInputType ~= Enum.UserInputType.MouseButton1 and
+       input.UserInputType ~= Enum.UserInputType.MouseButton2 and
+       input.UserInputType ~= Enum.UserInputType.MouseButton3 then return end
+    
+    local keyCode = input.KeyCode
+    local keyName
+    
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        keyName = "MouseButton1"; keyCode = nil
+    elseif input.UserInputType == Enum.UserInputType.MouseButton2 then
+        keyName = "MouseButton2"; keyCode = nil
+    elseif input.UserInputType == Enum.UserInputType.MouseButton3 then
+        keyName = "MouseButton3"; keyCode = nil
+    else
+        keyName = keyCode.Name
+    end
+    
+    if keyCode == Enum.KeyCode.Escape then
+        activeKeybindListener.button.Text = activeKeybindListener.defaultText
+        activeKeybindListener = nil
+        return
+    end
+    
+    local listener = activeKeybindListener
+    activeKeybindListener = nil
+    listener.button.Text = keyName
+    if listener.callback then listener.callback(keyCode, keyName) end
+end)
+
 local function makeToggle(parent, text, initialValue, callback, hotkeyId)
     local frame = Instance.new("Frame")
-    frame.Name = text
-    frame.Size = UDim2.new(1, 0, 0, 32)
+    frame.Size = UDim2.new(1, 0, 0, 34)
     frame.BackgroundColor3 = THEME.Panel
     frame.BorderSizePixel = 0
     frame.ZIndex = 3
     frame.Parent = parent
+    registerThemed(frame, "BackgroundColor3", "Panel")
     
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0, 3)
@@ -883,6 +1089,7 @@ local function makeToggle(parent, text, initialValue, callback, hotkeyId)
     stroke.Color = THEME.Border
     stroke.Thickness = 1
     stroke.Parent = frame
+    registerThemed(stroke, "Color", "Border")
     
     local label = Instance.new("TextLabel")
     label.Size = UDim2.new(1, -140, 1, 0)
@@ -895,16 +1102,15 @@ local function makeToggle(parent, text, initialValue, callback, hotkeyId)
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.ZIndex = 4
     label.Parent = frame
+    registerThemed(label, "TextColor3", "Text")
     
     local state = initialValue
     
-    -- Botão de hotkey
-    local hotkeyBtn
     if hotkeyId then
-        hotkeyBtn = Instance.new("TextButton")
+        local hotkeyBtn = Instance.new("TextButton")
         hotkeyBtn.Size = UDim2.new(0, 60, 0, 22)
         hotkeyBtn.Position = UDim2.new(1, -132, 0.5, -11)
-        hotkeyBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+        hotkeyBtn.BackgroundColor3 = THEME.PanelLight
         hotkeyBtn.Text = Config.Hotkeys[hotkeyId] or "None"
         hotkeyBtn.TextColor3 = THEME.SubText
         hotkeyBtn.Font = Enum.Font.GothamBold
@@ -912,36 +1118,25 @@ local function makeToggle(parent, text, initialValue, callback, hotkeyId)
         hotkeyBtn.AutoButtonColor = false
         hotkeyBtn.ZIndex = 4
         hotkeyBtn.Parent = frame
+        registerThemed(hotkeyBtn, "BackgroundColor3", "PanelLight")
+        registerThemed(hotkeyBtn, "TextColor3", "SubText")
         
         local hkCorner = Instance.new("UICorner")
         hkCorner.CornerRadius = UDim.new(0, 3)
         hkCorner.Parent = hotkeyBtn
         
-        local hkStroke = Instance.new("UIStroke")
-        hkStroke.Color = THEME.BorderLight
-        hkStroke.Thickness = 1
-        hkStroke.Parent = hotkeyBtn
-        
-        hotkeyBtn.MouseEnter:Connect(function()
-            TweenService:Create(hotkeyBtn, TweenInfo.new(0.15), {BackgroundColor3 = THEME.PanelLight}):Play()
-        end)
-        hotkeyBtn.MouseLeave:Connect(function()
-            TweenService:Create(hotkeyBtn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(25, 25, 25)}):Play()
-        end)
-        
         hotkeyBtn.MouseButton1Click:Connect(function()
-            startKeybindListening(hotkeyBtn, function(keyCode, keyName)
-                Config.Hotkeys[hotkeyId] = keyName
+            startKeybindListening(hotkeyBtn, function(kc, kn)
+                Config.Hotkeys[hotkeyId] = kn
                 persistConfig()
             end, Config.Hotkeys[hotkeyId] or "None")
         end)
     end
     
-    -- Botão toggle
     local toggle = Instance.new("TextButton")
     toggle.Size = UDim2.new(0, 50, 0, 22)
     toggle.Position = UDim2.new(1, -62, 0.5, -11)
-    toggle.BackgroundColor3 = initialValue and THEME.Success or Color3.fromRGB(30, 30, 30)
+    toggle.BackgroundColor3 = initialValue and THEME.Success or THEME.PanelLight
     toggle.Text = initialValue and "ON" or "OFF"
     toggle.TextColor3 = initialValue and Color3.new(1, 1, 1) or THEME.SubText
     toggle.Font = Enum.Font.GothamBold
@@ -954,18 +1149,13 @@ local function makeToggle(parent, text, initialValue, callback, hotkeyId)
     toggleCorner.CornerRadius = UDim.new(0, 3)
     toggleCorner.Parent = toggle
     
-    local toggleStroke = Instance.new("UIStroke")
-    toggleStroke.Color = THEME.BorderLight
-    toggleStroke.Thickness = 1
-    toggleStroke.Parent = toggle
-    
     local function update()
         if state then
             toggle.BackgroundColor3 = THEME.Success
             toggle.Text = "ON"
             toggle.TextColor3 = Color3.new(1, 1, 1)
         else
-            toggle.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+            toggle.BackgroundColor3 = THEME.PanelLight
             toggle.Text = "OFF"
             toggle.TextColor3 = THEME.SubText
         end
@@ -987,12 +1177,12 @@ end
 
 local function makeSlider(parent, text, minVal, maxVal, initialValue, callback)
     local frame = Instance.new("Frame")
-    frame.Name = text
-    frame.Size = UDim2.new(1, 0, 0, 56)
+    frame.Size = UDim2.new(1, 0, 0, 58)
     frame.BackgroundColor3 = THEME.Panel
     frame.BorderSizePixel = 0
     frame.ZIndex = 3
     frame.Parent = parent
+    registerThemed(frame, "BackgroundColor3", "Panel")
     
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0, 3)
@@ -1002,6 +1192,7 @@ local function makeSlider(parent, text, minVal, maxVal, initialValue, callback)
     stroke.Color = THEME.Border
     stroke.Thickness = 1
     stroke.Parent = frame
+    registerThemed(stroke, "Color", "Border")
     
     local label = Instance.new("TextLabel")
     label.Size = UDim2.new(1, -80, 0, 22)
@@ -1014,6 +1205,7 @@ local function makeSlider(parent, text, minVal, maxVal, initialValue, callback)
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.ZIndex = 4
     label.Parent = frame
+    registerThemed(label, "TextColor3", "Text")
     
     local valueLabel = Instance.new("TextLabel")
     valueLabel.Size = UDim2.new(0, 60, 0, 22)
@@ -1026,19 +1218,22 @@ local function makeSlider(parent, text, minVal, maxVal, initialValue, callback)
     valueLabel.TextXAlignment = Enum.TextXAlignment.Right
     valueLabel.ZIndex = 4
     valueLabel.Parent = frame
+    registerThemed(valueLabel, "TextColor3", "Accent2")
     
     local sliderBG = Instance.new("Frame")
     sliderBG.Size = UDim2.new(1, -24, 0, 6)
     sliderBG.Position = UDim2.new(0, 12, 0, 38)
-    sliderBG.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
+    sliderBG.BackgroundColor3 = THEME.Background
     sliderBG.BorderSizePixel = 0
     sliderBG.ZIndex = 4
     sliderBG.Parent = frame
+    registerThemed(sliderBG, "BackgroundColor3", "Background")
     
     local sliderBGStroke = Instance.new("UIStroke")
     sliderBGStroke.Color = THEME.Border
     sliderBGStroke.Thickness = 1
     sliderBGStroke.Parent = sliderBG
+    registerThemed(sliderBGStroke, "Color", "Border")
     
     local sliderFill = Instance.new("Frame")
     sliderFill.Size = UDim2.new((initialValue - minVal) / (maxVal - minVal), 0, 1, 0)
@@ -1046,10 +1241,6 @@ local function makeSlider(parent, text, minVal, maxVal, initialValue, callback)
     sliderFill.BorderSizePixel = 0
     sliderFill.ZIndex = 5
     sliderFill.Parent = sliderBG
-    
-    local sliderFillGradient = Instance.new("UIGradient")
-    sliderFillGradient.Color = ColorSequence.new(THEME.Accent1, THEME.Accent2)
-    sliderFillGradient.Parent = sliderFill
     
     local sliderKnob = Instance.new("TextButton")
     sliderKnob.Size = UDim2.new(0, 12, 0, 12)
@@ -1111,15 +1302,14 @@ local function makeSlider(parent, text, minVal, maxVal, initialValue, callback)
     end
 end
 
--- Dropdown (ciclo)
 local function makeDropdown(parent, text, options, initialValue, callback)
     local frame = Instance.new("Frame")
-    frame.Name = text
-    frame.Size = UDim2.new(1, 0, 0, 32)
+    frame.Size = UDim2.new(1, 0, 0, 34)
     frame.BackgroundColor3 = THEME.Panel
     frame.BorderSizePixel = 0
     frame.ZIndex = 3
     frame.Parent = parent
+    registerThemed(frame, "BackgroundColor3", "Panel")
     
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0, 3)
@@ -1129,6 +1319,7 @@ local function makeDropdown(parent, text, options, initialValue, callback)
     stroke.Color = THEME.Border
     stroke.Thickness = 1
     stroke.Parent = frame
+    registerThemed(stroke, "Color", "Border")
     
     local label = Instance.new("TextLabel")
     label.Size = UDim2.new(1, -100, 1, 0)
@@ -1141,24 +1332,21 @@ local function makeDropdown(parent, text, options, initialValue, callback)
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.ZIndex = 4
     label.Parent = frame
+    registerThemed(label, "TextColor3", "Text")
     
     local button = Instance.new("TextButton")
     button.Size = UDim2.new(0, 80, 0, 22)
     button.Position = UDim2.new(1, -92, 0.5, -11)
-    button.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    button.BackgroundColor3 = THEME.PanelLight
     button.Text = ""
     button.AutoButtonColor = false
     button.ZIndex = 4
     button.Parent = frame
+    registerThemed(button, "BackgroundColor3", "PanelLight")
     
     local btnCorner = Instance.new("UICorner")
     btnCorner.CornerRadius = UDim.new(0, 3)
     btnCorner.Parent = button
-    
-    local btnStroke = Instance.new("UIStroke")
-    btnStroke.Color = THEME.BorderLight
-    btnStroke.Thickness = 1
-    btnStroke.Parent = button
     
     local arrow = Instance.new("TextLabel")
     arrow.Size = UDim2.new(1, 0, 1, 0)
@@ -1170,13 +1358,11 @@ local function makeDropdown(parent, text, options, initialValue, callback)
     arrow.TextXAlignment = Enum.TextXAlignment.Center
     arrow.ZIndex = 5
     arrow.Parent = button
+    registerThemed(arrow, "TextColor3", "Accent2")
     
     local currentIndex = 1
     for i, opt in ipairs(options) do
-        if opt == initialValue then
-            currentIndex = i
-            break
-        end
+        if opt == initialValue then currentIndex = i; break end
     end
     
     local function updateDisplay()
@@ -1184,18 +1370,9 @@ local function makeDropdown(parent, text, options, initialValue, callback)
         if callback then callback(options[currentIndex]) end
     end
     
-    button.MouseEnter:Connect(function()
-        TweenService:Create(button, TweenInfo.new(0.15), {BackgroundColor3 = THEME.PanelLight}):Play()
-    end)
-    button.MouseLeave:Connect(function()
-        TweenService:Create(button, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(30, 30, 30)}):Play()
-    end)
-    
     button.MouseButton1Click:Connect(function()
         currentIndex = currentIndex + 1
-        if currentIndex > #options then
-            currentIndex = 1
-        end
+        if currentIndex > #options then currentIndex = 1 end
         updateDisplay()
         persistConfig()
     end)
@@ -1211,100 +1388,14 @@ local function makeDropdown(parent, text, options, initialValue, callback)
     end
 end
 
--- ═══════════════════════════════════════════════════════════════
--- CONSTRUÇÃO DA GUI
--- ═══════════════════════════════════════════════════════════════
-
-makeSection("GERAL")
-
-local setMasterToggle = makeToggle(content, "Ativar Tudo", Config.HitboxEnabled and Config.ESPEnabled, function(v)
-    setHitboxEnabled(v)
-    setESPEnabled(v)
-    if setHitboxToggle then setHitboxToggle(v) end
-    if setESPToggle then setESPToggle(v) end
-end)
-
-makeSection("HITBOX")
-
-local setHitboxToggle = makeToggle(content, "Hitbox Ativada", Config.HitboxEnabled, function(v)
-    setHitboxEnabled(v)
-end, "HitboxToggle")
-
-local setHitboxSizeSlider = makeSlider(content, "Tamanho da Hitbox", 1, 500, Config.HitboxSize, function(v)
-    updateHitboxSize(v)
-end)
-
-makeSection("ESP")
-
-local setESPToggle = makeToggle(content, "ESP Ativado", Config.ESPEnabled, function(v)
-    setESPEnabled(v)
-end, "ESPToggle")
-
-local setESPDistance = makeSlider(content, "Distancia Maxima", 50, 5000, Config.MaxDistance, function(v)
-    Config.MaxDistance = v
-end)
-
-local setESPNameFontSize = makeSlider(content, "Tamanho do Nome", 8, 48, Config.NameFontSize, function(v)
-    Config.NameFontSize = v
-    for _, data in pairs(targetCache) do
-        if data.billboard then
-            local label = data.billboard:FindFirstChild("Label")
-            applyBillboardStyle(data.billboard, label)
-        end
-    end
-end)
-
-local setESPNameTransparency = makeSlider(content, "Transparencia do Nome", 0, 90, math.floor(Config.NameTransparency * 100), function(v)
-    Config.NameTransparency = v / 100
-    for _, data in pairs(targetCache) do
-        if data.billboard then
-            local label = data.billboard:FindFirstChild("Label")
-            applyBillboardStyle(data.billboard, label)
-        end
-    end
-end)
-
-makeSection("AIMBOT (OPCIONAL)")
-
-local setAimbotToggle = makeToggle(content, "Aimbot Ativado", Config.AimbotEnabled, function(v)
-    setAimbotEnabled(v)
-end, "AimbotToggle")
-
-local setAimbotFOV = makeSlider(content, "FOV (Raio)", 10, 300, Config.AimbotFOV, function(v)
-    Config.AimbotFOV = v
-    if Config.AimbotDrawFOV then
-        aimbotFOVRing.Radius = v
-    end
-end)
-
-local setAimbotSmooth = makeSlider(content, "Suavidade", 0, 100, math.floor(Config.AimbotSmoothness * 100), function(v)
-    Config.AimbotSmoothness = v / 100
-end)
-
-local setAimbotMode = makeDropdown(content, "Modo", {"Toggle", "Hold"}, Config.AimbotMode, function(v)
-    Config.AimbotMode = v
-end)
-
-local setAimbotTarget = makeDropdown(content, "Alvo", {"Head", "HumanoidRootPart", "UpperTorso"}, Config.AimbotTarget, function(v)
-    Config.AimbotTarget = v
-end)
-
-local setAimbotDrawFOV = makeToggle(content, "Mostrar Circulo FOV", Config.AimbotDrawFOV, function(v)
-    Config.AimbotDrawFOV = v
-    aimbotFOVRing.Visible = Config.AimbotEnabled and v
-end)
-
--- ═══ SEÇÃO DE HOTKEYS GLOBAIS ═══
-makeSection("HOTKEYS")
-
 local function makeKeybindRow(parent, label, keyGetter, keySetter)
     local frame = Instance.new("Frame")
-    frame.Name = label
-    frame.Size = UDim2.new(1, 0, 0, 32)
+    frame.Size = UDim2.new(1, 0, 0, 34)
     frame.BackgroundColor3 = THEME.Panel
     frame.BorderSizePixel = 0
     frame.ZIndex = 3
     frame.Parent = parent
+    registerThemed(frame, "BackgroundColor3", "Panel")
     
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0, 3)
@@ -1314,6 +1405,7 @@ local function makeKeybindRow(parent, label, keyGetter, keySetter)
     stroke.Color = THEME.Border
     stroke.Thickness = 1
     stroke.Parent = frame
+    registerThemed(stroke, "Color", "Border")
     
     local lbl = Instance.new("TextLabel")
     lbl.Size = UDim2.new(1, -100, 1, 0)
@@ -1326,11 +1418,12 @@ local function makeKeybindRow(parent, label, keyGetter, keySetter)
     lbl.TextXAlignment = Enum.TextXAlignment.Left
     lbl.ZIndex = 4
     lbl.Parent = frame
+    registerThemed(lbl, "TextColor3", "Text")
     
     local btn = Instance.new("TextButton")
     btn.Size = UDim2.new(0, 80, 0, 22)
     btn.Position = UDim2.new(1, -92, 0.5, -11)
-    btn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    btn.BackgroundColor3 = THEME.PanelLight
     btn.Text = keyGetter()
     btn.TextColor3 = THEME.Accent2
     btn.Font = Enum.Font.GothamBold
@@ -1338,22 +1431,12 @@ local function makeKeybindRow(parent, label, keyGetter, keySetter)
     btn.AutoButtonColor = false
     btn.ZIndex = 4
     btn.Parent = frame
+    registerThemed(btn, "BackgroundColor3", "PanelLight")
+    registerThemed(btn, "TextColor3", "Accent2")
     
     local btnCorner = Instance.new("UICorner")
     btnCorner.CornerRadius = UDim.new(0, 3)
     btnCorner.Parent = btn
-    
-    local btnStroke = Instance.new("UIStroke")
-    btnStroke.Color = THEME.BorderLight
-    btnStroke.Thickness = 1
-    btnStroke.Parent = btn
-    
-    btn.MouseEnter:Connect(function()
-        TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundColor3 = THEME.PanelLight}):Play()
-    end)
-    btn.MouseLeave:Connect(function()
-        TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(30, 30, 30)}):Play()
-    end)
     
     btn.MouseButton1Click:Connect(function()
         startKeybindListening(btn, function(keyCode, keyName)
@@ -1365,46 +1448,370 @@ local function makeKeybindRow(parent, label, keyGetter, keySetter)
     return btn
 end
 
-makeKeybindRow(content, "Ligar/Desligar Tudo", function()
+-- ═══════════════════════════════════════════════════════════════
+-- CRIAÇÃO DAS ABAS
+-- ═══════════════════════════════════════════════════════════════
+
+createTabButton("Aimbot")
+createTabButton("ESP")
+createTabButton("Hitbox")
+createTabButton("Hotkeys")
+createTabButton("Config")
+
+local aimbotTab = createTab("Aimbot")
+local espTab = createTab("ESP")
+local hitboxTab = createTab("Hitbox")
+local hotkeysTab = createTab("Hotkeys")
+local configTab = createTab("Config")
+
+-- ═══════════════════════════════════════════════════════════════
+-- ABA: AIMBOT
+-- ═══════════════════════════════════════════════════════════════
+
+makeSection(aimbotTab, "AIMBOT")
+
+local setAimbotToggle = makeToggle(aimbotTab, "Aimbot Ativado", Config.AimbotEnabled, function(v)
+    setAimbotEnabled(v)
+end, "AimbotToggle")
+setAimbotToggleVisual = setAimbotToggle
+
+makeSlider(aimbotTab, "FOV (Raio)", 10, 300, Config.AimbotFOV, function(v)
+    Config.AimbotFOV = v
+    if Config.AimbotDrawFOV then aimbotFOVRing.Radius = v end
+    persistConfig()
+end)
+
+makeSlider(aimbotTab, "Suavidade", 0, 100, math.floor(Config.AimbotSmoothness * 100), function(v)
+    Config.AimbotSmoothness = v / 100
+    persistConfig()
+end)
+
+makeDropdown(aimbotTab, "Modo", {"Toggle", "Hold"}, Config.AimbotMode, function(v)
+    Config.AimbotMode = v
+end)
+
+makeDropdown(aimbotTab, "Alvo", {"Head", "HumanoidRootPart", "UpperTorso"}, Config.AimbotTarget, function(v)
+    Config.AimbotTarget = v
+end)
+
+makeToggle(aimbotTab, "Mostrar Circulo FOV", Config.AimbotDrawFOV, function(v)
+    Config.AimbotDrawFOV = v
+    aimbotFOVRing.Visible = Config.AimbotEnabled and v
+    persistConfig()
+end)
+
+makeSection(aimbotTab, "FILTROS")
+
+makeToggle(aimbotTab, "Ignorar Aliados", Config.AimbotTeamCheck, function(v)
+    Config.AimbotTeamCheck = v
+    persistConfig()
+end)
+
+makeToggle(aimbotTab, "Ignorar Mortos", Config.AimbotIgnoreDead, function(v)
+    Config.AimbotIgnoreDead = v
+    persistConfig()
+end)
+
+-- ═══════════════════════════════════════════════════════════════
+-- ABA: ESP
+-- ═══════════════════════════════════════════════════════════════
+
+makeSection(espTab, "ESP")
+
+local setESPToggle = makeToggle(espTab, "ESP Ativado", Config.ESPEnabled, function(v)
+    setESPEnabled(v)
+end, "ESPToggle")
+setESPToggleVisual = setESPToggle
+
+makeSection(espTab, "FILTROS")
+
+makeToggle(espTab, "Mostrar seu Time", Config.ShowTeam, function(v)
+    Config.ShowTeam = v
+    persistConfig()
+end)
+
+makeToggle(espTab, "Mostrar Time Inimigo", Config.ShowEnemies, function(v)
+    Config.ShowEnemies = v
+    persistConfig()
+end)
+
+makeToggle(espTab, "Destacar Inimigos", Config.HighlightEnemies, function(v)
+    Config.HighlightEnemies = v
+    persistConfig()
+end)
+
+makeToggle(espTab, "Mostrar Mortos", Config.ShowDead, function(v)
+    Config.ShowDead = v
+    persistConfig()
+end)
+
+makeSection(espTab, "APARENCIA")
+
+makeSlider(espTab, "Distancia Maxima", 50, 5000, Config.MaxDistance, function(v)
+    Config.MaxDistance = v
+    persistConfig()
+end)
+
+makeSlider(espTab, "Tamanho do Nome", 8, 48, Config.NameFontSize, function(v)
+    Config.NameFontSize = v
+    for _, data in pairs(targetCache) do
+        if data.billboard then
+            local label = data.billboard:FindFirstChild("Label")
+            if label then applyBillboardStyle(data.billboard, label, label.TextColor3) end
+        end
+    end
+    persistConfig()
+end)
+
+makeSlider(espTab, "Transparencia do Nome", 0, 90, math.floor(Config.NameTransparency * 100), function(v)
+    Config.NameTransparency = v / 100
+    for _, data in pairs(targetCache) do
+        if data.billboard then
+            local label = data.billboard:FindFirstChild("Label")
+            if label then applyBillboardStyle(data.billboard, label, label.TextColor3) end
+        end
+    end
+    persistConfig()
+end)
+
+-- ═══════════════════════════════════════════════════════════════
+-- ABA: HITBOX
+-- ═══════════════════════════════════════════════════════════════
+
+makeSection(hitboxTab, "HITBOX")
+
+local setHitboxToggle = makeToggle(hitboxTab, "Hitbox Ativada", Config.HitboxEnabled, function(v)
+    setHitboxEnabled(v)
+end, "HitboxToggle")
+setHitboxToggleVisual = setHitboxToggle
+
+makeSlider(hitboxTab, "Tamanho da Hitbox", 1, 500, Config.HitboxSize, function(v)
+    updateHitboxSize(v)
+end)
+
+-- ═══════════════════════════════════════════════════════════════
+-- ABA: HOTKEYS
+-- ═══════════════════════════════════════════════════════════════
+
+makeSection(hotkeysTab, "HOTKEYS GLOBAIS")
+
+makeKeybindRow(hotkeysTab, "Ligar/Desligar Tudo", function()
     return keyToString(Config.KeybindToggleAll)
 end, function(keyCode)
     if keyCode then Config.KeybindToggleAll = keyCode end
 end)
 
-makeKeybindRow(content, "Abrir/Fechar GUI", function()
+makeKeybindRow(hotkeysTab, "Abrir/Fechar GUI", function()
     return keyToString(Config.KeybindToggleGUI)
 end, function(keyCode)
     if keyCode then Config.KeybindToggleGUI = keyCode end
 end)
 
-makeKeybindRow(content, "Toggle Hitbox", function()
+makeKeybindRow(hotkeysTab, "Toggle Hitbox", function()
     return keyToString(Config.KeybindToggleHitbox)
 end, function(keyCode)
     if keyCode then Config.KeybindToggleHitbox = keyCode end
 end)
 
-makeKeybindRow(content, "Toggle ESP", function()
+makeKeybindRow(hotkeysTab, "Toggle ESP", function()
     return keyToString(Config.KeybindToggleESP)
 end, function(keyCode)
     if keyCode then Config.KeybindToggleESP = keyCode end
 end)
 
-makeKeybindRow(content, "Toggle Aimbot", function()
+makeKeybindRow(hotkeysTab, "Toggle Aimbot", function()
     return keyToString(Config.KeybindToggleAimbot)
 end, function(keyCode)
     if keyCode then Config.KeybindToggleAimbot = keyCode end
 end)
 
-local footer = Instance.new("TextLabel")
-footer.Size = UDim2.new(1, 0, 0, 40)
-footer.BackgroundTransparency = 1
-footer.Font = Enum.Font.Gotham
-footer.Text = "Clique numa tecla pra remapear | ESC cancela"
-footer.TextColor3 = THEME.SubText
-footer.TextSize = 10
-footer.TextWrapped = true
-footer.ZIndex = 3
-footer.Parent = content
+-- ═══════════════════════════════════════════════════════════════
+-- ABA: CONFIG
+-- ═══════════════════════════════════════════════════════════════
+
+makeSection(configTab, "APARENCIA DO MENU")
+
+makeDropdown(configTab, "Tema", {"Black", "White"}, Config.ThemeMode == "black" and "Black" or "White", function(v)
+    Config.ThemeMode = v:lower()
+    THEME = THEMES[Config.ThemeMode] or THEMES.black
+    applyTheme()
+    persistConfig()
+end)
+
+makeSection(configTab, "HOTKEYS PRINCIPAIS")
+
+makeKeybindRow(configTab, "Ligar/Desligar Tudo", function()
+    return keyToString(Config.KeybindToggleAll)
+end, function(keyCode)
+    if keyCode then Config.KeybindToggleAll = keyCode end
+end)
+
+makeKeybindRow(configTab, "Abrir/Fechar GUI", function()
+    return keyToString(Config.KeybindToggleGUI)
+end, function(keyCode)
+    if keyCode then Config.KeybindToggleGUI = keyCode end
+end)
+
+makeKeybindRow(configTab, "Toggle Hitbox", function()
+    return keyToString(Config.KeybindToggleHitbox)
+end, function(keyCode)
+    if keyCode then Config.KeybindToggleHitbox = keyCode end
+end)
+
+makeKeybindRow(configTab, "Toggle ESP", function()
+    return keyToString(Config.KeybindToggleESP)
+end, function(keyCode)
+    if keyCode then Config.KeybindToggleESP = keyCode end
+end)
+
+makeKeybindRow(configTab, "Toggle Aimbot", function()
+    return keyToString(Config.KeybindToggleAimbot)
+end, function(keyCode)
+    if keyCode then Config.KeybindToggleAimbot = keyCode end
+end)
+
+makeSection(configTab, "ACOES")
+
+-- Reset
+local resetFrame = Instance.new("Frame")
+resetFrame.Size = UDim2.new(1, 0, 0, 38)
+resetFrame.BackgroundColor3 = THEME.Panel
+resetFrame.BorderSizePixel = 0
+resetFrame.ZIndex = 3
+resetFrame.Parent = configTab
+registerThemed(resetFrame, "BackgroundColor3", "Panel")
+
+local resetCorner = Instance.new("UICorner")
+resetCorner.CornerRadius = UDim.new(0, 3)
+resetCorner.Parent = resetFrame
+
+local resetStroke = Instance.new("UIStroke")
+resetStroke.Color = THEME.Border
+resetStroke.Thickness = 1
+resetStroke.Parent = resetFrame
+registerThemed(resetStroke, "Color", "Border")
+
+local resetLabel = Instance.new("TextLabel")
+resetLabel.Size = UDim2.new(1, -140, 1, 0)
+resetLabel.Position = UDim2.new(0, 12, 0, 0)
+resetLabel.BackgroundTransparency = 1
+resetLabel.Font = Enum.Font.Gotham
+resetLabel.Text = "Resetar Configuracoes"
+resetLabel.TextColor3 = THEME.Text
+resetLabel.TextSize = 12
+resetLabel.TextXAlignment = Enum.TextXAlignment.Left
+resetLabel.ZIndex = 4
+resetLabel.Parent = resetFrame
+registerThemed(resetLabel, "TextColor3", "Text")
+
+local resetBtn = Instance.new("TextButton")
+resetBtn.Size = UDim2.new(0, 100, 0, 24)
+resetBtn.Position = UDim2.new(1, -112, 0.5, -12)
+resetBtn.BackgroundColor3 = THEME.Danger
+resetBtn.Text = "RESET"
+resetBtn.TextColor3 = Color3.new(1, 1, 1)
+resetBtn.Font = Enum.Font.GothamBold
+resetBtn.TextSize = 11
+resetBtn.AutoButtonColor = false
+resetBtn.ZIndex = 4
+resetBtn.Parent = resetFrame
+
+local resetCorner2 = Instance.new("UICorner")
+resetCorner2.CornerRadius = UDim.new(0, 3)
+resetCorner2.Parent = resetBtn
+
+resetBtn.MouseButton1Click:Connect(function()
+    if hasFileAPI() and isfile(CONFIG_FILE) then
+        pcall(function() delfile(CONFIG_FILE) end)
+    end
+    resetBtn.Text = "OK!"
+    task.wait(1)
+    resetBtn.Text = "RESET"
+end)
+
+-- Unload
+local unloadFrame = Instance.new("Frame")
+unloadFrame.Size = UDim2.new(1, 0, 0, 38)
+unloadFrame.BackgroundColor3 = THEME.Panel
+unloadFrame.BorderSizePixel = 0
+unloadFrame.ZIndex = 3
+unloadFrame.Parent = configTab
+registerThemed(unloadFrame, "BackgroundColor3", "Panel")
+
+local unloadCorner = Instance.new("UICorner")
+unloadCorner.CornerRadius = UDim.new(0, 3)
+unloadCorner.Parent = unloadFrame
+
+local unloadStroke = Instance.new("UIStroke")
+unloadStroke.Color = THEME.Border
+unloadStroke.Thickness = 1
+unloadStroke.Parent = unloadFrame
+registerThemed(unloadStroke, "Color", "Border")
+
+local unloadLabel = Instance.new("TextLabel")
+unloadLabel.Size = UDim2.new(1, -140, 1, 0)
+unloadLabel.Position = UDim2.new(0, 12, 0, 0)
+unloadLabel.BackgroundTransparency = 1
+unloadLabel.Font = Enum.Font.Gotham
+unloadLabel.Text = "Desativar Menu (Unload)"
+unloadLabel.TextColor3 = THEME.Text
+unloadLabel.TextSize = 12
+unloadLabel.TextXAlignment = Enum.TextXAlignment.Left
+unloadLabel.ZIndex = 4
+unloadLabel.Parent = unloadFrame
+registerThemed(unloadLabel, "TextColor3", "Text")
+
+local unloadBtn = Instance.new("TextButton")
+unloadBtn.Size = UDim2.new(0, 100, 0, 24)
+unloadBtn.Position = UDim2.new(1, -112, 0.5, -12)
+unloadBtn.BackgroundColor3 = THEME.Danger
+unloadBtn.Text = "UNLOAD"
+unloadBtn.TextColor3 = Color3.new(1, 1, 1)
+unloadBtn.Font = Enum.Font.GothamBold
+unloadBtn.TextSize = 11
+unloadBtn.AutoButtonColor = false
+unloadBtn.ZIndex = 4
+unloadBtn.Parent = unloadFrame
+
+local unloadCorner2 = Instance.new("UICorner")
+unloadCorner2.CornerRadius = UDim.new(0, 3)
+unloadCorner2.Parent = unloadBtn
+
+-- Info
+local infoLabel = Instance.new("TextLabel")
+infoLabel.Size = UDim2.new(1, 0, 0, 40)
+infoLabel.BackgroundTransparency = 1
+infoLabel.Font = Enum.Font.Gotham
+infoLabel.Text = "Config: " .. CONFIG_FILE
+infoLabel.TextColor3 = THEME.SubText
+infoLabel.TextSize = 10
+infoLabel.TextWrapped = true
+infoLabel.ZIndex = 3
+infoLabel.Parent = configTab
+registerThemed(infoLabel, "TextColor3", "SubText")
+
+-- ═══════════════════════════════════════════════════════════════
+-- UNLOAD
+-- ═══════════════════════════════════════════════════════════════
+
+local function unloadMenu()
+    setHitboxEnabled(false)
+    setESPEnabled(false)
+    setAimbotEnabled(false)
+    
+    for character, _ in pairs(targetCache) do
+        removeTarget(character)
+    end
+    
+    pcall(function() aimbotFOVRing:Remove() end)
+    pcall(function() screenGui:Destroy() end)
+    
+    getgenv().Config = nil
+    print("[Lxzinn__ H-E Menu] Unloaded!")
+end
+
+unloadBtn.MouseButton1Click:Connect(unloadMenu)
+getgenv().UnloadMenu = unloadMenu
 
 -- ═══════════════════════════════════════════════════════════════
 -- DRAG
@@ -1422,6 +1829,8 @@ titleBar.InputBegan:Connect(function(input)
         input.Changed:Connect(function()
             if input.UserInputState == Enum.UserInputState.End then
                 dragging = false
+                Config.MenuPosition = {X = mainFrame.Position.X.Scale, Y = mainFrame.Position.Y.Scale}
+                persistConfig()
             end
         end)
     end
@@ -1438,78 +1847,72 @@ titleBar.InputChanged:Connect(function(input)
 end)
 
 -- ═══════════════════════════════════════════════════════════════
--- HOTKEY HANDLER (verifica as teclas configuradas + hotkeys por opção)
+-- HOTKEY HANDLER (SINCRONIZADO)
 -- ═══════════════════════════════════════════════════════════════
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    if activeKeybindListener then return end  -- não interfere quando está remapeando
+    if activeKeybindListener then return end
     if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
     
     local key = input.KeyCode
     local keyName = key.Name
     
-    -- Toggle GUI
     if key == Config.KeybindToggleGUI then
         mainFrame.Visible = not mainFrame.Visible
         return
     end
     
-    -- Toggle All
+    if gameProcessed then return end
+    
     if key == Config.KeybindToggleAll then
         local newState = not (Config.HitboxEnabled and Config.ESPEnabled)
         setHitboxEnabled(newState)
         setESPEnabled(newState)
-        if setHitboxToggle then setHitboxToggle(newState) end
-        if setESPToggle then setESPToggle(newState) end
-        if setMasterToggle then setMasterToggle(newState) end
+        if setHitboxToggleVisual then setHitboxToggleVisual(newState) end
+        if setESPToggleVisual then setESPToggleVisual(newState) end
         return
     end
     
-    -- Toggle Hitbox
     if key == Config.KeybindToggleHitbox then
         local newState = not Config.HitboxEnabled
         setHitboxEnabled(newState)
-        if setHitboxToggle then setHitboxToggle(newState) end
+        if setHitboxToggleVisual then setHitboxToggleVisual(newState) end
         return
     end
     
-    -- Toggle ESP
     if key == Config.KeybindToggleESP then
         local newState = not Config.ESPEnabled
         setESPEnabled(newState)
-        if setESPToggle then setESPToggle(newState) end
+        if setESPToggleVisual then setESPToggleVisual(newState) end
         return
     end
     
-    -- Toggle Aimbot
     if key == Config.KeybindToggleAimbot then
         if Config.AimbotMode == "Toggle" then
             local newState = not Config.AimbotEnabled
             setAimbotEnabled(newState)
-            if setAimbotToggle then setAimbotToggle(newState) end
+            if setAimbotToggleVisual then setAimbotToggleVisual(newState) end
         else
             aimbotIsHolding = true
         end
         return
     end
     
-    -- ═══ HOTKEYS PERSONALIZADAS POR OPÇÃO ═══
     if Config.Hotkeys then
-        for id, keyName2 in pairs(Config.Hotkeys) do
-            if keyName2 and keyName2 ~= "" and keyName2 ~= "None" and keyName == keyName2 then
+        for id, savedKey in pairs(Config.Hotkeys) do
+            if savedKey and savedKey ~= "" and savedKey ~= "None" and savedKey == keyName then
                 if id == "HitboxToggle" then
                     local newState = not Config.HitboxEnabled
                     setHitboxEnabled(newState)
-                    if setHitboxToggle then setHitboxToggle(newState) end
+                    if setHitboxToggleVisual then setHitboxToggleVisual(newState) end
                 elseif id == "ESPToggle" then
                     local newState = not Config.ESPEnabled
                     setESPEnabled(newState)
-                    if setESPToggle then setESPToggle(newState) end
+                    if setESPToggleVisual then setESPToggleVisual(newState) end
                 elseif id == "AimbotToggle" then
                     local newState = not Config.AimbotEnabled
                     setAimbotEnabled(newState)
-                    if setAimbotToggle then setAimbotToggle(newState) end
+                    if setAimbotToggleVisual then setAimbotToggleVisual(newState) end
                 end
             end
         end
@@ -1518,7 +1921,6 @@ end)
 
 UserInputService.InputEnded:Connect(function(input)
     if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
-    
     if input.KeyCode == Config.KeybindToggleAimbot and Config.AimbotMode == "Hold" then
         aimbotIsHolding = false
     end
@@ -1528,32 +1930,21 @@ end)
 -- INICIALIZAÇÃO
 -- ═══════════════════════════════════════════════════════════════
 
+updateMyTeam()
+
 for _, player in ipairs(Players:GetPlayers()) do
     if player ~= LocalPlayer then
-        player.CharacterAdded:Connect(function(char)
-            onCharacterAdded(player, char)
-        end)
-        
-        player.CharacterRemoving:Connect(function(char)
-            onCharacterRemoving(player, char)
-        end)
-        
+        player.CharacterAdded:Connect(function(char) onCharacterAdded(player, char) end)
+        player.CharacterRemoving:Connect(function(char) onCharacterRemoving(player, char) end)
         if player.Character then
-            task.spawn(function()
-                onCharacterAdded(player, player.Character)
-            end)
+            task.spawn(function() onCharacterAdded(player, player.Character) end)
         end
     end
 end
 
 Players.PlayerAdded:Connect(function(player)
-    player.CharacterAdded:Connect(function(char)
-        onCharacterAdded(player, char)
-    end)
-    
-    player.CharacterRemoving:Connect(function(char)
-        onCharacterRemoving(player, char)
-    end)
+    player.CharacterAdded:Connect(function(char) onCharacterAdded(player, char) end)
+    player.CharacterRemoving:Connect(function(char) onCharacterRemoving(player, char) end)
 end)
 
 Players.PlayerRemoving:Connect(function(player)
@@ -1563,15 +1954,17 @@ Players.PlayerRemoving:Connect(function(player)
     end
 end)
 
+LocalPlayer:GetPropertyChangedSignal("Team"):Connect(function()
+    updateMyTeam()
+end)
+
 if Config.ShowNPCs then
     task.spawn(function()
         while task.wait(5) do
             for _, model in ipairs(workspace:GetChildren()) do
                 if model:IsA("Model") and not Players:GetPlayerFromCharacter(model) then
                     if model:FindFirstChildOfClass("Humanoid") and model:FindFirstChild("Head") then
-                        if not targetCache[model] then
-                            setupTarget(model, nil)
-                        end
+                        if not targetCache[model] then setupTarget(model, nil) end
                     end
                 end
             end
@@ -1581,9 +1974,7 @@ end
 
 task.spawn(function()
     while task.wait(Config.UpdateRate) do
-        if Config.ESPEnabled then
-            pcall(updateAll)
-        end
+        if Config.ESPEnabled then pcall(updateAll) end
     end
 end)
 
@@ -1591,21 +1982,18 @@ task.spawn(function()
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and Config.HitboxEnabled then
             local head = player.Character:FindFirstChild("Head")
-            if head then
-                transformHead(player.Character)
-            end
+            if head then transformHead(player.Character) end
         end
     end
 end)
 
 setAimbotEnabled(Config.AimbotEnabled)
+switchTab(Config.CurrentTab or "Aimbot")
 
 print("═════════════════════════════════════")
-print("[Lxzinn__ H-E Menu] Carregado!")
+print("[Lxzinn__ H-E Menu v3.2] Carregado!")
+print("[Abas] Aimbot | ESP | Hitbox | Hotkeys | Config")
 print("[ALT] Abrir/Fechar GUI")
 print("[K] Ligar/Desligar TUDO")
-print("[H] Toggle Hitbox")
-print("[J] Toggle ESP")
-print("[RS] Toggle Aimbot")
-print("Arquivo de config: " .. CONFIG_FILE)
+print("Config: " .. CONFIG_FILE)
 print("═════════════════════════════════════")
